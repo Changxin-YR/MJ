@@ -1,0 +1,19 @@
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { Film, Plus } from 'lucide-vue-next'
+import { api } from '../../api'
+import type { Episode, Project, Scene } from '../../types'
+const props = defineProps<{ project: Project; canEdit: boolean }>()
+const episodes = ref<Episode[]>([]); const selected = ref<Episode | null>(null); const scenes = ref<Scene[]>([]); const title = ref(''); const synopsis = ref(''); const heading = ref(''); const description = ref(''); const error = ref(''); const notice = ref('')
+const root = computed(() => `/projects/${props.project.id}`)
+async function load() { episodes.value = await api.get(`${root.value}/episodes`); if (!selected.value && episodes.value.length) await select(episodes.value[0]); else if (selected.value) await select(selected.value) }
+async function select(episode: Episode) { selected.value = episode; scenes.value = await api.get(`${root.value}/episodes/${episode.id}/scenes`) }
+async function createEpisode() { try { const episode = await api.post<Episode>(`${root.value}/episodes`, { title: title.value, synopsis: synopsis.value }); episodes.value.push(episode); await select(episode); title.value = ''; synopsis.value = ''; notice.value = '剧集已创建。' } catch (cause) { error.value = (cause as Error).message } }
+async function createScene() { if (!selected.value) return; try { const scene = await api.post<Scene>(`${root.value}/episodes/${selected.value.id}/scenes`, { heading: heading.value, description: description.value }); scenes.value.push(scene); heading.value = ''; description.value = ''; notice.value = '场景已创建。' } catch (cause) { error.value = (cause as Error).message } }
+onMounted(load)
+</script>
+<template>
+  <div class="section-head"><div><div class="section-kicker">Episode Production</div><h1>剧集与场景</h1><p>将原作拆成剧集与场景，再进入分镜工作室创建镜头。</p></div><RouterLink :to="`/projects/${project.id}/storyboard`" class="btn">进入分镜工作室</RouterLink></div>
+  <div v-if="error" class="error" style="margin-bottom:16px">{{ error }}</div><div v-if="notice" class="notice" style="margin-bottom:16px">{{ notice }}</div>
+  <div class="split"><div class="stack"><section v-if="canEdit" class="panel panel-pad"><h2>新建剧集</h2><form @submit.prevent="createEpisode"><div class="field"><label>标题</label><input v-model="title" required placeholder="第一集 · 标题" /></div><div class="field"><label>剧情概要</label><textarea v-model="synopsis" rows="3" placeholder="这一集发生什么？"></textarea></div><button class="btn btn-primary"><Plus :size="15" />创建剧集</button></form></section><section class="panel panel-pad"><h2>剧集列表</h2><div v-if="episodes.length" class="list"><button v-for="episode in episodes" :key="episode.id" class="list-row" style="text-align:left;color:inherit" @click="select(episode)"><div><strong>EP {{ String(episode.episode_no).padStart(2,'0') }} · {{ episode.title }}</strong><br><small>{{ episode.synopsis || '暂无概要' }}</small></div><Film :size="17" /></button></div><div v-else class="empty"><div><strong>暂无剧集</strong><p>创建首集后即可添加场景。</p></div></div></section></div><div class="stack"><section class="panel panel-pad"><h2>{{ selected ? `${selected.title}的场景` : '选择剧集' }}</h2><div v-if="scenes.length" class="list"><div v-for="scene in scenes" :key="scene.id" class="list-row"><div><strong>SC {{ String(scene.scene_no).padStart(2,'0') }} · {{ scene.heading }}</strong><br><small>{{ scene.description || '暂无场景描述' }}</small></div></div></div><div v-else class="empty"><div><strong>暂无场景</strong><p>每个场景可以包含多个镜头。</p></div></div></section><section v-if="selected && canEdit" class="panel panel-pad"><h2>新建场景</h2><form @submit.prevent="createScene"><div class="field"><label>场景标题</label><input v-model="heading" required placeholder="例如：EXT. CITY ROOFTOP - NIGHT" /></div><div class="field"><label>场景描述</label><textarea v-model="description" rows="3" placeholder="地点、时间与动作"></textarea></div><button class="btn btn-primary"><Plus :size="15" />添加场景</button></form></section></div></div>
+</template>

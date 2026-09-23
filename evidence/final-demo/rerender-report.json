@@ -1,0 +1,25 @@
+{
+  "rendered_at": "2026-09-23T05:40:59.186012+00:00",
+  "project_id": "9f63776f-b512-4e68-b21b-5e20266a159b",
+  "episode_id": "13a1d0f7-fc16-4c38-9540-d20d3ebe28bc",
+  "final_asset_id": "2fbd3498-16c5-4e15-8ec6-39d34d34a01e",
+  "bytes": 21082719,
+  "ffprobe": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "width": 1280,
+        "height": 720
+      },
+      {
+        "codec_name": "aac"
+      }
+    ],
+    "format": {
+      "duration": "60.000000"
+    }
+  },
+  "status": "PASS"
+}

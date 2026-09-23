@@ -1,0 +1,16 @@
+{
+  "checked_at": "2026-09-23T05:47:35.857670+00:00",
+  "provider": "DashScopeEmbeddingProvider",
+  "model": "text-embedding-v4",
+  "dimensions": 1024,
+  "collection": "frameforge_knowledge_1024_f8dc293d78",
+  "document_id": "5d11c157-cb6a-4e42-bc3b-3a7f72bb319d",
+  "version_id": "f8d3cb97-5bb0-448c-a9ab-88bdc99f289c",
+  "query": "米拉在暴雨中的城市寻找钟楼与黎明",
+  "result_count": 1,
+  "source_ids": [
+    "a49673f8-4f8f-4b3f-b4b8-d227f00a3e3b"
+  ],
+  "all_results_scoped": true,
+  "status": "PASS"
+}

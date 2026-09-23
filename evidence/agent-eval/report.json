@@ -1,0 +1,26 @@
+{
+  "checked_at": "2026-09-23T06:09:57.653733+00:00",
+  "case_ids": [
+    "tool_correctness",
+    "structured_output",
+    "context_grounding",
+    "character_consistency",
+    "policy_compliance",
+    "permission_safety",
+    "rag_source_quality"
+  ],
+  "categories": [
+    "Tool Correctness",
+    "Structured Output",
+    "Context Grounding",
+    "Character Consistency",
+    "Policy Compliance",
+    "Permission Safety",
+    "RAG Source Quality"
+  ],
+  "exit_code": 0,
+  "summary": [
+    "7 passed, 1 warning in 3.86s"
+  ],
+  "status": "PASS"
+}

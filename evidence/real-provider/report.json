@@ -1,0 +1,39 @@
+{
+  "started_at": "2026-09-23T01:28:58.589342+00:00",
+  "provider": "dashscope",
+  "results": {
+    "image": {
+      "file": "image.png",
+      "mime": "image/png",
+      "model": "wan2.6-t2i",
+      "bytes": 2199191,
+      "sha256": "88670b46bf386a9b0ac8608f0783d7cac34650c1d4217320dffdf6351c531534",
+      "width": 1280,
+      "height": 1280,
+      "duration": null
+    },
+    "voice": {
+      "file": "voice.wav",
+      "mime": "audio/wav",
+      "model": "qwen3-tts-flash",
+      "bytes": 76878,
+      "sha256": "f25d21b3d454c7448e7868a43cdd2d145da3f8b7e4133f7f3379ec63486dc3db",
+      "width": null,
+      "height": null,
+      "duration": null
+    },
+    "video_task_id": "90246db4-cff1-4968-87c7-e460ec87822a",
+    "video": {
+      "file": "video.mp4",
+      "mime": "video/mp4",
+      "model": "wan2.6-i2v-flash",
+      "bytes": 2584489,
+      "sha256": "1a445745e96a90ca97d90b33266f788e83f5cd112bfc880319888552a7ef2928",
+      "width": null,
+      "height": null,
+      "duration": null
+    }
+  },
+  "status": "PASS",
+  "finished_at": "2026-09-23T01:29:53.740462+00:00"
+}

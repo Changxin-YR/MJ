@@ -1,0 +1,17 @@
+export interface Workspace { id: string; name: string; role: string }
+export interface Project { id: string; workspace_id: string; name: string; description: string; version: number; settings: Record<string, unknown>; budget_limit: number; budget_used: number; budget_reserved: number; role: string }
+export interface Story { id: string; title: string; content: string; status: string; created_at: string }
+export interface CharacterVersion { id: string; character_id: string; version_no: number; status: string; dna: Record<string, string>; background: string }
+export interface Character { id: string; name: string; active_version_id: string | null; version: number; versions: CharacterVersion[] | null }
+export interface Episode { id: string; episode_no: number; title: string; synopsis: string; status: string }
+export interface Scene { id: string; episode_id: string; scene_no: number; heading: string; description: string; version: number }
+export interface Inspection { status: 'PASS' | 'FAIL'; score: number; issues: string[]; checks: Record<string, string>; method: string; model?: string }
+export interface Shot { id: string; episode_id: string; scene_id: string; shot_no: number; shot_type: string; camera_angle: string; camera_movement: string; duration: number; description: string; action: string; dialogue: string; emotion: string; character_ids: string[]; prompt: string; negative_prompt: string; current_image_asset_id: string | null; current_video_asset_id: string | null; current_audio_asset_id: string | null; inspection_json: Inspection | null; status: string; version: number }
+export interface Job { id: string; resource_id: string; kind: string; provider: string; model: string; status: string; estimated_cost: number; actual_cost: number; inspection: Inspection | null; retry_count: number; error_code: string | null; error_message: string | null; created_at: string; trace_id: string }
+export interface Asset { id: string; mime: string; size: number; width: number | null; height: number | null; duration: number | null; status: string; source_job_id: string | null }
+export interface PendingAction { id: string; action: string; target_id: string; status: string; requester_id: string; approver_id: string | null }
+export interface AgentRun { id: string; project_id: string; request: string; status: string; current_node: string; decision_summary: string; retrieved_sources: {document_id: string; source_id: string; score: number}[]; warnings: string[]; trace_id: string; cost: number; tool_calls: {id: string; name: string; status: string; summary: string}[]; generation_jobs: {id: string; kind: string; status: string; provider: string}[]; pending_actions: PendingAction[] }
+export interface TimelineTrack { id: string; kind: string; order_no: number }
+export interface TimelineItem { id: string; track_id: string; shot_id: string | null; asset_id: string | null; start_seconds: number; duration_seconds: number; text: string }
+export interface Timeline { id: string; episode_id: string; status: string; version: number; final_asset_id: string | null; tracks: TimelineTrack[]; items: TimelineItem[] }
+export interface AuditEvent { id: string; actor_type: string; actor_id: string | null; action: string; resource_type: string; resource_id: string | null; permission_result: string; result: string; agent_run_id: string | null; trace_id: string; safe_summary: string; time: string }
