@@ -15,6 +15,7 @@ flowchart LR
   CQ --> WK[Worker]
   WK --> PG[Provider Gateway]
   PG --> DS[DashScope]
+  PG --> CU[Private ComfyUI]
   PG --> FP[FakeProvider]
   WK --> S3[(MinIO)]
   API --> FF[FFmpeg Timeline Renderer]
@@ -23,4 +24,4 @@ flowchart LR
 
 `/health/live` 检查进程；`/health/ready` 检查 MySQL、Redis、Qdrant、MinIO。外部模型故障不影响 Core API readiness。开发环境由 `docker-compose.yml` 启动，所有对宿主机开放的端口只绑定 `127.0.0.1`。
 
-当前 Director 使用确定性意图与计划；RAG 使用显式标识的测试向量。它们的能力边界见 [agent.md](agent.md) 与 [rag.md](rag.md)。
+当前 Director 使用确定性意图与计划；只读分析可选真实 Qwen Plus。RAG 默认使用显式标识的测试向量，也可切换到 `text-embedding-v4` 的真实向量索引。它们的能力边界见 [agent.md](agent.md) 与 [rag.md](rag.md)。

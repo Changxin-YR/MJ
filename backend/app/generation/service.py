@@ -47,7 +47,12 @@ def request_generation(db: Session, scope: ProjectScope, shot_id: str, kind: str
     estimate = Decimal(str(entry.cost[kind])) * (Decimal(str(shot.duration)) if kind == "VIDEO" else Decimal(1))
     reserve(db, project, estimate)
     transition_shot(shot, "GENERATING")
-    model = {"IMAGE": settings.dashscope_image_model, "VIDEO": settings.dashscope_video_model, "VOICE": settings.dashscope_tts_model}[kind] if entry.provider == "dashscope" else f"fake-{kind.lower()}-v1"
+    if entry.provider == "dashscope":
+        model = {"IMAGE": settings.dashscope_image_model, "VIDEO": settings.dashscope_video_model, "VOICE": settings.dashscope_tts_model}[kind]
+    elif entry.provider == "comfyui":
+        model = settings.comfyui_checkpoint
+    else:
+        model = f"fake-{kind.lower()}-v1"
     job = GenerationJob(workspace_id=scope.workspace_id, project_id=scope.project_id, provider=entry.provider, model=model, resource_type="shot", resource_id=shot.id, kind=kind, input_json={"prompt": ". ".join(filter(None, [shot.description, shot.action, shot.prompt])), "negative_prompt": shot.negative_prompt, "duration": shot.duration, "dialogue": shot.dialogue, "image_asset_id": shot.current_image_asset_id}, idempotency_key=idempotency_key, estimated_cost=estimate, actual_cost=0, status="CREATED", trace_id=trace_id, agent_run_id=agent_run_id, tool_call_id=tool_call_id)
     db.add(job)
     db.flush()

@@ -7,7 +7,7 @@ from app.api.errors import APIError, ok, trace_id
 from app.audit.service import record
 from app.auth.dependencies import ProjectScope, project_scope, require, scoped_get
 from app.db import get_db
-from app.models import Character, CharacterVersion, Episode, Scene, Shot
+from app.models import Character, CharacterVersion, Episode, Scene, Shot, now
 from app.storyboard.state import transition_shot
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["storyboard"])
@@ -61,6 +61,7 @@ class ShotEdit(BaseModel):
 class ShotAction(BaseModel):
     expected_version: int
     target: str
+    review_reason: str | None = Field(default=None, max_length=500)
 
 
 class Reorder(BaseModel):
@@ -207,8 +208,18 @@ def transition(shot_id: str, payload: ShotAction, request: Request, scope: Proje
         raise APIError("RESOURCE_NOT_FOUND", "Shot not found", 404)
     if shot.version != payload.expected_version:
         raise APIError("RESOURCE_VERSION_CONFLICT", "Shot changed", 409)
+    if payload.target == "APPROVED" and (shot.inspection_json or {}).get("status") == "FAIL" and not (payload.review_reason or "").strip():
+        raise APIError("INSPECTION_FAILED", "A reason is required to approve a failed inspection", 409)
+    if payload.target == "APPROVED" and (shot.inspection_json or {}).get("status") == "FAIL":
+        shot.inspection_json = {**shot.inspection_json, "review_override": {"actor_id": scope.user_id, "reason": payload.review_reason.strip(), "video_asset_id": shot.current_video_asset_id, "reviewed_at": now().isoformat()}}
+        if shot.status == "APPROVED":
+            shot.version += 1
+            record(db, actor_type="USER", actor_id=scope.user_id, action="shot.review_override", resource_type="shot", resource_id=shot.id, workspace_id=scope.workspace_id, project_id=scope.project_id, trace_id=trace_id(request), safe_summary=payload.review_reason.strip())
+            db.commit()
+            return ok(request, shot_data(shot))
     transition_shot(shot, payload.target)
-    record(db, actor_type="USER", actor_id=scope.user_id, action="shot.transition", resource_type="shot", resource_id=shot.id, workspace_id=scope.workspace_id, project_id=scope.project_id, trace_id=trace_id(request), safe_summary=payload.target)
+    summary = payload.target if not payload.review_reason else f"{payload.target}: {payload.review_reason.strip()}"
+    record(db, actor_type="USER", actor_id=scope.user_id, action="shot.transition", resource_type="shot", resource_id=shot.id, workspace_id=scope.workspace_id, project_id=scope.project_id, trace_id=trace_id(request), safe_summary=summary)
     db.commit()
     return ok(request, shot_data(shot))
 

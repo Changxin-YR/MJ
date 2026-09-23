@@ -5,7 +5,9 @@ from fastapi.testclient import TestClient
 from test_core_flow import call, register
 from test_generation_flow import make_ready_shot
 
+from app.db import SessionLocal
 from app.main import app
+from app.models import Shot
 from app.workers.tasks import process_generation
 
 
@@ -34,6 +36,19 @@ def test_render_approved_timeline_to_playable_mp4():
     assert code == 200, body
     timeline = body["data"]
     assert len(timeline["items"]) == 3
+    with SessionLocal() as db:
+        current = db.get(Shot, shot["id"])
+        current.inspection_json = {"status": "FAIL", "issues": ["Recheck found a mismatch"]}
+        db.commit()
+    code, body = call(client, "POST", f"{prefix}/timelines/{timeline['id']}/sync", token, json={"expected_version": timeline["version"]})
+    assert code == 409 and body["error"]["code"] == "RESOURCE_CONFLICT"
+    code, body = call(client, "POST", f"{prefix}/timelines/{timeline['id']}/render", token, json={"expected_version": timeline["version"]})
+    assert code == 409 and body["error"]["code"] == "RESOURCE_CONFLICT"
+    code, body = call(client, "GET", f"{prefix}/shots/{shot['id']}", token)
+    assert code == 200, body
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/transition", token, json={"expected_version": body["data"]["version"], "target": "APPROVED", "review_reason": "I checked the current video frame by frame and the mismatch is not present."})
+    assert code == 200 and body["data"]["status"] == "APPROVED"
+    assert body["data"]["inspection_json"]["review_override"]["video_asset_id"] == shot["current_video_asset_id"]
     code, body = call(client, "POST", f"{prefix}/timelines/{timeline['id']}/render", token, json={"expected_version": timeline["version"]})
     assert code == 200, body
     final_asset_id = body["data"]["final_asset_id"]

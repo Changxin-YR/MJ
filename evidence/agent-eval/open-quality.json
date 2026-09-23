@@ -1,0 +1,60 @@
+{
+  "checked_at": "2026-09-23T12:05:19.402937+00:00",
+  "project_id": "9f63776f-b512-4e68-b21b-5e20266a159b",
+  "llm_model": "qwen-plus",
+  "embedding_model": "text-embedding-v4",
+  "results": [
+    {
+      "id": "signal_key",
+      "question": "只根据故事资料回答：米拉在隧道中找到什么，后来在哪里使用？",
+      "run_id": "7663a845-7bd8-4c9a-92d4-9ff1fdcb7850",
+      "summary": "米拉在隧道深处找到一枚信号钥匙，后来在钟楼的发射器中使用。",
+      "source_ids": [
+        "a49673f8-4f8f-4b3f-b4b8-d227f00a3e3b"
+      ],
+      "trace_id": "53271828-e6fa-428c-8b05-c3cea61871af",
+      "checks": {
+        "completed": true,
+        "grounded_answer": true,
+        "sources_present": true,
+        "read_only": true
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "deadline",
+      "question": "只根据故事资料回答：信里要求米拉在什么时间之前完成任务？",
+      "run_id": "d0810978-83e0-41b8-b339-17479344f1d2",
+      "summary": "在太阳升起之前。",
+      "source_ids": [
+        "a49673f8-4f8f-4b3f-b4b8-d227f00a3e3b"
+      ],
+      "trace_id": "6725ff83-b886-4c5b-8911-34bbbe11c05b",
+      "checks": {
+        "completed": true,
+        "grounded_answer": true,
+        "sources_present": true,
+        "read_only": true
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "sender",
+      "question": "只根据故事资料回答：信上是否写了寄件人的姓名？若没有，请明确说明。",
+      "run_id": "e82c3a7d-cd8a-4e21-a819-e638eb88fba6",
+      "summary": "没有。信上没有写寄件人的姓名。",
+      "source_ids": [
+        "a49673f8-4f8f-4b3f-b4b8-d227f00a3e3b"
+      ],
+      "trace_id": "5c04a4c1-6710-4934-a32c-40124fc00ebf",
+      "checks": {
+        "completed": true,
+        "grounded_answer": true,
+        "sources_present": true,
+        "read_only": true
+      },
+      "status": "PASS"
+    }
+  ],
+  "status": "PASS"
+}

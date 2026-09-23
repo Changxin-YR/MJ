@@ -15,11 +15,11 @@ from app.main import app
 STORY = """断电后的城市，在黎明前像一张没有写完的画。信使米拉穿着蓝色雨衣，背着橙色邮差包，接到一封没有寄件人的信。信中只有一张旧车站的坐标和一句话：在太阳升起之前，把光送回钟楼。她越过湿滑的屋顶，穿过停摆的车站，在隧道深处找到一枚信号钥匙。钟楼上的倒计时只剩五秒。米拉把钥匙放进发射器，灯光沿着街道一盏盏亮起。她望着重新苏醒的城市，终于明白信的寄件人，是那个从未放弃这座城的自己。"""
 
 BEATS = [
-    ("A blacked-out city before dawn, wet rooftops and dark windows, Mira the courier on a roof in silhouette", "天亮前，城市断电了。"),
-    ("Mira discovers an old sealed letter beneath her orange messenger bag on a rainy rooftop", "一封信，指向钟楼。"),
-    ("Close view of Mira reading a hand-drawn map in the letter, city skyline behind her", "太阳升起前，送回光。"),
+    ("Before dawn, a patchy citywide outage leaves many districts dark, with backup lights beneath a full moon; one Mira surveys the city from a wet rooftop", "天亮前，城市断电了。"),
+    ("Mira opens the single orange messenger bag she wears and takes out one sealed letter on a rainy rooftop; no second bag", "一封信，指向钟楼。"),
+    ("Only one Mira reads a hand-drawn map from the letter on the rooftop, city skyline behind her", "太阳升起前，送回光。"),
     ("Mira runs across a rain-soaked rooftop, orange messenger bag swinging, city below", "我得赶在黎明之前。"),
-    ("Mira reaches a silent clock tower under storm clouds, no lights in the city", "钟楼就在前面。"),
+    ("Mira reaches the tall ornate neo-Gothic clock tower under storm clouds as first orange light reaches the horizon; backup lights remain in the patchy outage", "钟楼就在前面。"),
     ("Mira descends into an abandoned train station, blue raincoat and orange bag distinct", "旧车站，藏着答案。"),
     ("Mira follows a faint blue signal through an empty tunnel, atmospheric graphic novel art", "信号还没有消失。"),
     ("Mira finds a small brass signal key beside a dormant machine in the tunnel", "找到了，就是它。"),
@@ -103,6 +103,8 @@ def main() -> None:
         for shot in shots:
             current = call("GET", prefix + f"/shots/{shot['id']}")
             inspection.append({"shot_id": shot["id"], "status": current["inspection_json"]["status"], "method": current["inspection_json"]["method"]})
+            if current["inspection_json"]["status"] != "PASS":
+                raise RuntimeError(f"Shot {shot['id']} failed visual inspection")
             call("POST", prefix + f"/shots/{shot['id']}/transition", json={"expected_version": current["version"], "target": "APPROVED"})
         report["stages"]["inspection"] = inspection
         timeline = call("POST", prefix + f"/episodes/{episode['id']}/timeline")

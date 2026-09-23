@@ -100,3 +100,27 @@ def test_worker_retries_transient_provider_failure_then_stops_on_permanent_failu
         assert job.status == "FAILED" and job.finished_at is not None
         assert job.error_code == "GENERATION_FAILED"
     registry.success("fake")
+
+
+def test_voice_check_preserves_visual_failure_and_review_requires_reason():
+    client = TestClient(app)
+    _, token = register(client, "visual-review")
+    prefix, shot = make_ready_shot(client, token)
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": "IMAGE", "idempotency_key": str(uuid4())})
+    assert code == 200, body
+    process_generation(body["data"]["id"])
+    with SessionLocal() as db:
+        row = db.get(Shot, shot["id"])
+        row.inspection_json = {"status": "FAIL", "score": 0.2, "issues": ["Two characters"], "checks": {"character_count": "FAIL"}, "method": "QWEN_VL"}
+        db.commit()
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": "VOICE", "idempotency_key": str(uuid4())})
+    assert code == 200, body
+    process_generation(body["data"]["id"])
+    code, body = call(client, "GET", f"{prefix}/shots/{shot['id']}", token)
+    assert code == 200 and body["data"]["inspection_json"]["status"] == "FAIL"
+    shot = body["data"]
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/transition", token, json={"expected_version": shot["version"], "target": "APPROVED"})
+    assert code == 409 and body["error"]["code"] == "INSPECTION_FAILED"
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/transition", token, json={"expected_version": shot["version"], "target": "APPROVED", "review_reason": "I inspected the full video and confirmed one character."})
+    assert code == 200 and body["data"]["status"] == "APPROVED"
+    assert body["data"]["inspection_json"]["review_override"]["reason"] == "I inspected the full video and confirmed one character."

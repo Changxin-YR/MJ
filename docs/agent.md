@@ -4,6 +4,6 @@ LangGraph 主图包含身份验证、项目 Scope、意图理解、结构化上�
 
 Tool Gateway 只登记 `load_project_context`、`retrieve_semantic_context`、`load_generation_job`、`generate_shot`。每个工具有输入契约、权限、风险级别、幂等与确认标记。调用参数不得指定 `project_id`、`workspace_id`、`user_id`、`role` 来覆盖服务端 Scope。未获批准不能执行生成，撤销会话后不能 resume。
 
-计划节点根据 API 的显式 `intent` 构造确定性动作计划。`ANALYZE` 在 `DIRECTOR_LLM_MODE=dashscope` 时调用 Qwen Plus，对结构化信息和标记为不可信的检索文本做只读摘要；真实运行证据在 `evidence/final-demo/director-llm.json`。生成动作仍需人工批准。Worker 完成媒体后运行结构化 Inspector：真实图像/视频使用 Qwen VL，声音与 FakeProvider 输出明确标记技术检查范围。未能由单帧证明的对白、字幕、情节连续性保留 `UNVERIFIED`。
+计划节点根据 API 的显式 `intent` 构造确定性动作计划。`ANALYZE` 在 `DIRECTOR_LLM_MODE=dashscope` 时调用 Qwen Plus，对结构化信息和标记为不可信的检索文本做只读摘要；真实运行证据在 `evidence/final-demo/director-llm.json`，三道事实问答的评估见 `evidence/agent-eval/open-quality.json`。生成动作仍需人工批准。Worker 完成媒体后运行结构化 Inspector：真实图像/视频使用 Qwen VL，声音与 FakeProvider 输出明确标记技术检查范围。未能由单帧证明的对白、字幕、镜头间连续性保留 `UNVERIFIED`。
 
 `app/mcp/server.py` 提供 stdio MCP 适配器，仅导出只读工具。进程访问令牌必须与 Director Run 的用户和服务端 Session 一致，随后仍调用 Tool Gateway。长期记忆更新仍待正式审批闭环完善。

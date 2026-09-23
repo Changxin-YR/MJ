@@ -19,9 +19,9 @@ Open `http://localhost:28080`. API documentation is at `http://localhost:28080/a
 ## Verification
 
 ```powershell
-docker compose exec api pytest -q
-docker compose exec api ruff check app tests scripts
-docker compose exec api alembic check
+docker compose run --rm --no-deps -e PROVIDER_MODE=fake api pytest -q
+docker compose run --rm --no-deps api ruff check app tests scripts
+docker compose run --rm --no-deps api alembic check
 npm --prefix frontend run build
 npm --prefix frontend run e2e
 ```

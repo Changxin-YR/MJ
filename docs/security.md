@@ -8,4 +8,4 @@
 
 MCP stdio 适配器仅提供只读工具，并将访问令牌绑定到 Director Run 的用户与会话；每次调用继续经过 Tool Gateway。
 
-ComfyUI 适配器固定工作流节点和参数，限制私有服务地址、检查点文件名及返回图像路径；尚未与真实 ComfyUI 实例联调。当前实际运行使用主动轮询，不开放云 Provider Callback，因此没有回调签名、时间窗与重放验证。部署前还需 TLS、密钥管理、非 root Worker、备份与对象过期清理。
+ComfyUI 适配器固定工作流节点和参数，限制私有服务地址、检查点文件名及返回图像路径；已与本机私有 ComfyUI 实例完成实图和 Job 链路联调。DashScope 任务继续使用主动轮询；受信任回调中继协议已有 HMAC 签名、时间窗、持久化 nonce 防重放及 Job 绑定测试，见 [Callback 协议](provider-callback.md)。对外部署前仍需按部署环境配置 TLS、密钥管理、备份与对象过期清理。

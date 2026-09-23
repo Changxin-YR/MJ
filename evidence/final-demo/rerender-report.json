@@ -1,9 +1,9 @@
 {
-  "rendered_at": "2026-09-23T05:40:59.186012+00:00",
+  "rendered_at": "2026-09-23T12:15:47.845504+00:00",
   "project_id": "9f63776f-b512-4e68-b21b-5e20266a159b",
   "episode_id": "13a1d0f7-fc16-4c38-9540-d20d3ebe28bc",
-  "final_asset_id": "2fbd3498-16c5-4e15-8ec6-39d34d34a01e",
-  "bytes": 21082719,
+  "final_asset_id": "3e465302-8b94-45c3-bb85-6a5f4672bcb8",
+  "bytes": 20438676,
   "ffprobe": {
     "programs": [],
     "stream_groups": [],

@@ -3,32 +3,6 @@
   "count": 12,
   "results": [
     {
-      "job_id": "776e0dbe-4814-4198-a409-e35ea5727b3c",
-      "shot_id": "f1bc3cfb-ed51-4405-848c-281cb6185aac",
-      "inspection": {
-        "status": "FAIL",
-        "score": 0.7,
-        "issues": [
-          "City has lit windows and streetlights, contradicting 'no lights in the city'",
-          "Clock tower resembles Big Ben (London), not a generic silent clock tower; may break setting consistency",
-          "Character wears blue raincoat and orange bag as specified, but raincoat appears glossy/wet — acceptable per style, though lighting suggests some ambient light sources inconsistent with 'no lights'"
-        ],
-        "checks": {
-          "character_consistency": "PASS",
-          "costume": "PASS",
-          "scene_continuity": "UNVERIFIED",
-          "character_count": "PASS",
-          "dialogue": "UNVERIFIED",
-          "subtitle": "UNVERIFIED",
-          "visual_defect": "FAIL",
-          "story_deviation": "UNVERIFIED",
-          "style_consistency": "PASS"
-        },
-        "method": "QWEN_VL",
-        "model": "qwen3-vl-plus"
-      }
-    },
-    {
       "job_id": "c3b9cb57-2cba-487f-999b-33b1f5a94e9a",
       "shot_id": "2feebf97-6ba3-4f7b-aeea-5668794919a0",
       "inspection": {
@@ -43,7 +17,7 @@
           "dialogue": "UNVERIFIED",
           "subtitle": "UNVERIFIED",
           "visual_defect": "PASS",
-          "story_deviation": "UNVERIFIED",
+          "story_deviation": "PASS",
           "style_consistency": "PASS"
         },
         "method": "QWEN_VL",
@@ -51,8 +25,8 @@
       }
     },
     {
-      "job_id": "8fb41d06-36fd-4545-b40f-4651184fbadd",
-      "shot_id": "dbf2c2d2-cd28-485e-a2a9-1fcf0cbfb06e",
+      "job_id": "c437e332-d4f6-4c65-801e-9d7952fe6951",
+      "shot_id": "1f6b8825-9dc7-4cea-9278-a680d93ef319",
       "inspection": {
         "status": "PASS",
         "score": 0.98,
@@ -65,171 +39,7 @@
           "dialogue": "UNVERIFIED",
           "subtitle": "UNVERIFIED",
           "visual_defect": "PASS",
-          "story_deviation": "UNVERIFIED",
-          "style_consistency": "PASS"
-        },
-        "method": "QWEN_VL",
-        "model": "qwen3-vl-plus"
-      }
-    },
-    {
-      "job_id": "33d96e53-abd9-4bd4-be28-018213187f37",
-      "shot_id": "2e4b3d9f-f6c8-40e2-8b3a-3715f136be54",
-      "inspection": {
-        "status": "PASS",
-        "score": 0.95,
-        "issues": [],
-        "checks": {
-          "character_consistency": "PASS",
-          "costume": "PASS",
-          "scene_continuity": "UNVERIFIED",
-          "character_count": "PASS",
-          "dialogue": "UNVERIFIED",
-          "subtitle": "UNVERIFIED",
-          "visual_defect": "PASS",
-          "story_deviation": "UNVERIFIED",
-          "style_consistency": "PASS"
-        },
-        "method": "QWEN_VL",
-        "model": "qwen3-vl-plus"
-      }
-    },
-    {
-      "job_id": "ffedfbd4-3541-4d8e-9993-df1be24a10be",
-      "shot_id": "81d13bec-53c5-45d4-b180-7a78ca97131d",
-      "inspection": {
-        "status": "FAIL",
-        "score": 0.3,
-        "issues": [
-          "Two identical characters (Mira) shown, violating character_count_expected=1",
-          "Character inconsistency: duplicate Mira instead of single instance",
-          "Visual defect: unnatural duplication suggests AI artifact or composition error",
-          "Costume matches prompt (blue raincoat, orange bag), but duplication invalidates consistency"
-        ],
-        "checks": {
-          "character_consistency": "FAIL",
-          "costume": "PASS",
-          "scene_continuity": "UNVERIFIED",
-          "character_count": "FAIL",
-          "dialogue": "UNVERIFIED",
-          "subtitle": "UNVERIFIED",
-          "visual_defect": "FAIL",
-          "story_deviation": "UNVERIFIED",
-          "style_consistency": "PASS"
-        },
-        "method": "QWEN_VL",
-        "model": "qwen3-vl-plus"
-      }
-    },
-    {
-      "job_id": "f22ad01e-10eb-42cd-89fa-56e7e1f81105",
-      "shot_id": "3cfeb9e0-ecb9-4fde-b7f1-0a445461e8af",
-      "inspection": {
-        "status": "FAIL",
-        "score": 0.95,
-        "issues": [
-          "City not fully blacked-out: distant skyscrapers show illuminated windows, contradicting 'blacked-out city before dawn'",
-          "Rain visible but wet rooftops lack strong reflection consistency (some areas overly glossy, others matte)"
-        ],
-        "checks": {
-          "character_consistency": "PASS",
-          "costume": "PASS",
-          "scene_continuity": "UNVERIFIED",
-          "character_count": "PASS",
-          "dialogue": "UNVERIFIED",
-          "subtitle": "UNVERIFIED",
-          "visual_defect": "FAIL",
-          "story_deviation": "UNVERIFIED",
-          "style_consistency": "PASS"
-        },
-        "method": "QWEN_VL",
-        "model": "qwen3-vl-plus"
-      }
-    },
-    {
-      "job_id": "8f8924d5-fa81-4054-b331-16d563b9eb5b",
-      "shot_id": "041898ed-e40f-4516-a7a1-8e33c25f7843",
-      "inspection": {
-        "status": "PASS",
-        "score": 0.95,
-        "issues": [],
-        "checks": {
-          "character_consistency": "PASS",
-          "costume": "PASS",
-          "scene_continuity": "UNVERIFIED",
-          "character_count": "PASS",
-          "dialogue": "UNVERIFIED",
-          "subtitle": "UNVERIFIED",
-          "visual_defect": "PASS",
-          "story_deviation": "UNVERIFIED",
-          "style_consistency": "PASS"
-        },
-        "method": "QWEN_VL",
-        "model": "qwen3-vl-plus"
-      }
-    },
-    {
-      "job_id": "04602d5f-65b2-40d5-a4ea-cc793e5394c1",
-      "shot_id": "aa41ddee-3385-479a-a2f5-6072bd8b1dc6",
-      "inspection": {
-        "status": "FAIL",
-        "score": 0.95,
-        "issues": [
-          "Orange messenger bag is worn on shoulder but also appears as a separate brown leather bag being opened; visual ambiguity in bag identity"
-        ],
-        "checks": {
-          "character_consistency": "PASS",
-          "costume": "PASS",
-          "scene_continuity": "UNVERIFIED",
-          "character_count": "PASS",
-          "dialogue": "UNVERIFIED",
-          "subtitle": "UNVERIFIED",
-          "visual_defect": "FAIL",
-          "story_deviation": "UNVERIFIED",
-          "style_consistency": "PASS"
-        },
-        "method": "QWEN_VL",
-        "model": "qwen3-vl-plus"
-      }
-    },
-    {
-      "job_id": "7ab3c26d-2c82-4b58-9662-577102b82be0",
-      "shot_id": "48b04fe1-e87f-46c7-9669-4e37960cbf24",
-      "inspection": {
-        "status": "PASS",
-        "score": 0.95,
-        "issues": [],
-        "checks": {
-          "character_consistency": "PASS",
-          "costume": "PASS",
-          "scene_continuity": "UNVERIFIED",
-          "character_count": "PASS",
-          "dialogue": "UNVERIFIED",
-          "subtitle": "UNVERIFIED",
-          "visual_defect": "PASS",
-          "story_deviation": "UNVERIFIED",
-          "style_consistency": "PASS"
-        },
-        "method": "QWEN_VL",
-        "model": "qwen3-vl-plus"
-      }
-    },
-    {
-      "job_id": "25fe3b41-9c94-48ee-b177-a7cb2c86df8b",
-      "shot_id": "fac5a3b0-4466-44b9-b7ff-a8897a82ce63",
-      "inspection": {
-        "status": "PASS",
-        "score": 0.98,
-        "issues": [],
-        "checks": {
-          "character_consistency": "PASS",
-          "costume": "PASS",
-          "scene_continuity": "UNVERIFIED",
-          "character_count": "PASS",
-          "dialogue": "UNVERIFIED",
-          "subtitle": "UNVERIFIED",
-          "visual_defect": "PASS",
-          "story_deviation": "UNVERIFIED",
+          "story_deviation": "PASS",
           "style_consistency": "PASS"
         },
         "method": "QWEN_VL",
@@ -251,7 +61,7 @@
           "dialogue": "UNVERIFIED",
           "subtitle": "UNVERIFIED",
           "visual_defect": "PASS",
-          "story_deviation": "UNVERIFIED",
+          "story_deviation": "PASS",
           "style_consistency": "PASS"
         },
         "method": "QWEN_VL",
@@ -259,8 +69,184 @@
       }
     },
     {
-      "job_id": "c437e332-d4f6-4c65-801e-9d7952fe6951",
-      "shot_id": "1f6b8825-9dc7-4cea-9278-a680d93ef319",
+      "job_id": "25fe3b41-9c94-48ee-b177-a7cb2c86df8b",
+      "shot_id": "fac5a3b0-4466-44b9-b7ff-a8897a82ce63",
+      "inspection": {
+        "status": "PASS",
+        "score": 0.98,
+        "issues": [],
+        "checks": {
+          "character_consistency": "PASS",
+          "costume": "PASS",
+          "scene_continuity": "UNVERIFIED",
+          "character_count": "PASS",
+          "dialogue": "UNVERIFIED",
+          "subtitle": "UNVERIFIED",
+          "visual_defect": "PASS",
+          "story_deviation": "PASS",
+          "style_consistency": "PASS"
+        },
+        "method": "QWEN_VL",
+        "model": "qwen3-vl-plus"
+      }
+    },
+    {
+      "job_id": "8fb41d06-36fd-4545-b40f-4651184fbadd",
+      "shot_id": "dbf2c2d2-cd28-485e-a2a9-1fcf0cbfb06e",
+      "inspection": {
+        "status": "PASS",
+        "score": 0.98,
+        "issues": [],
+        "checks": {
+          "character_consistency": "PASS",
+          "costume": "PASS",
+          "scene_continuity": "UNVERIFIED",
+          "character_count": "PASS",
+          "dialogue": "UNVERIFIED",
+          "subtitle": "UNVERIFIED",
+          "visual_defect": "PASS",
+          "story_deviation": "PASS",
+          "style_consistency": "PASS"
+        },
+        "method": "QWEN_VL",
+        "model": "qwen3-vl-plus"
+      }
+    },
+    {
+      "job_id": "33d96e53-abd9-4bd4-be28-018213187f37",
+      "shot_id": "2e4b3d9f-f6c8-40e2-8b3a-3715f136be54",
+      "inspection": {
+        "status": "PASS",
+        "score": 0.98,
+        "issues": [],
+        "checks": {
+          "character_consistency": "PASS",
+          "costume": "PASS",
+          "scene_continuity": "UNVERIFIED",
+          "character_count": "PASS",
+          "dialogue": "UNVERIFIED",
+          "subtitle": "UNVERIFIED",
+          "visual_defect": "PASS",
+          "story_deviation": "PASS",
+          "style_consistency": "PASS"
+        },
+        "method": "QWEN_VL",
+        "model": "qwen3-vl-plus"
+      }
+    },
+    {
+      "job_id": "8f8924d5-fa81-4054-b331-16d563b9eb5b",
+      "shot_id": "041898ed-e40f-4516-a7a1-8e33c25f7843",
+      "inspection": {
+        "status": "PASS",
+        "score": 0.98,
+        "issues": [],
+        "checks": {
+          "character_consistency": "PASS",
+          "costume": "PASS",
+          "scene_continuity": "UNVERIFIED",
+          "character_count": "PASS",
+          "dialogue": "UNVERIFIED",
+          "subtitle": "UNVERIFIED",
+          "visual_defect": "PASS",
+          "story_deviation": "PASS",
+          "style_consistency": "PASS"
+        },
+        "method": "QWEN_VL",
+        "model": "qwen3-vl-plus"
+      }
+    },
+    {
+      "job_id": "7ab3c26d-2c82-4b58-9662-577102b82be0",
+      "shot_id": "48b04fe1-e87f-46c7-9669-4e37960cbf24",
+      "inspection": {
+        "status": "PASS",
+        "score": 0.98,
+        "issues": [],
+        "checks": {
+          "character_consistency": "PASS",
+          "costume": "PASS",
+          "scene_continuity": "UNVERIFIED",
+          "character_count": "PASS",
+          "dialogue": "UNVERIFIED",
+          "subtitle": "UNVERIFIED",
+          "visual_defect": "PASS",
+          "story_deviation": "PASS",
+          "style_consistency": "PASS"
+        },
+        "method": "QWEN_VL",
+        "model": "qwen3-vl-plus"
+      }
+    },
+    {
+      "job_id": "fc5bb528-789b-4cc8-b82c-d86021763f29",
+      "shot_id": "3cfeb9e0-ecb9-4fde-b7f1-0a445461e8af",
+      "inspection": {
+        "status": "PASS",
+        "score": 0.98,
+        "issues": [],
+        "checks": {
+          "character_consistency": "PASS",
+          "costume": "PASS",
+          "scene_continuity": "UNVERIFIED",
+          "character_count": "PASS",
+          "dialogue": "UNVERIFIED",
+          "subtitle": "UNVERIFIED",
+          "visual_defect": "PASS",
+          "story_deviation": "PASS",
+          "style_consistency": "PASS"
+        },
+        "method": "QWEN_VL",
+        "model": "qwen3-vl-plus"
+      }
+    },
+    {
+      "job_id": "38d51bc9-0451-4d40-870c-6a070a49670a",
+      "shot_id": "aa41ddee-3385-479a-a2f5-6072bd8b1dc6",
+      "inspection": {
+        "status": "PASS",
+        "score": 1.0,
+        "issues": [],
+        "checks": {
+          "character_consistency": "PASS",
+          "costume": "PASS",
+          "scene_continuity": "UNVERIFIED",
+          "character_count": "PASS",
+          "dialogue": "UNVERIFIED",
+          "subtitle": "UNVERIFIED",
+          "visual_defect": "PASS",
+          "story_deviation": "PASS",
+          "style_consistency": "PASS"
+        },
+        "method": "QWEN_VL",
+        "model": "qwen3-vl-plus"
+      }
+    },
+    {
+      "job_id": "e26818d0-aa75-4348-a71e-6ee402ef36ba",
+      "shot_id": "81d13bec-53c5-45d4-b180-7a78ca97131d",
+      "inspection": {
+        "status": "PASS",
+        "score": 1.0,
+        "issues": [],
+        "checks": {
+          "character_consistency": "PASS",
+          "costume": "PASS",
+          "scene_continuity": "UNVERIFIED",
+          "character_count": "PASS",
+          "dialogue": "UNVERIFIED",
+          "subtitle": "UNVERIFIED",
+          "visual_defect": "PASS",
+          "story_deviation": "PASS",
+          "style_consistency": "PASS"
+        },
+        "method": "QWEN_VL",
+        "model": "qwen3-vl-plus"
+      }
+    },
+    {
+      "job_id": "769f70e6-234d-435a-951c-eadd4db60356",
+      "shot_id": "f1bc3cfb-ed51-4405-848c-281cb6185aac",
       "inspection": {
         "status": "PASS",
         "score": 0.95,
@@ -273,7 +259,7 @@
           "dialogue": "UNVERIFIED",
           "subtitle": "UNVERIFIED",
           "visual_defect": "PASS",
-          "story_deviation": "UNVERIFIED",
+          "story_deviation": "PASS",
           "style_consistency": "PASS"
         },
         "method": "QWEN_VL",

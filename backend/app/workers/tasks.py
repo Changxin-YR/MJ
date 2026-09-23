@@ -118,7 +118,10 @@ def complete_job(job_id: str, owner: str, result, inspection: dict) -> None:
             shot.current_video_asset_id = asset.id
         else:
             shot.current_audio_asset_id = asset.id
-        shot.inspection_json = inspection
+        # The shot displays the current visual review. A later voice job has
+        # only a technical audio check and must not erase image/video findings.
+        if job.kind != "VOICE" or not shot.inspection_json:
+            shot.inspection_json = inspection
         job.inspection_json = inspection
         transition_job(job, "SUCCEEDED")
         job.finished_at = now()

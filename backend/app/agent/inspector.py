@@ -54,9 +54,14 @@ def _visual_inspection(shot: Shot, frame: bytes) -> dict:
         "Inspect the image and return only a JSON object with status PASS or FAIL, score from 0 to 1, "
         "issues as an array of short strings, and checks as an object. Checks must contain these exact keys: "
         + ", ".join(CHECKS) + ". Each check value is PASS, FAIL, or UNVERIFIED. "
-        "Mark dialogue, subtitle, scene_continuity and story_deviation UNVERIFIED for a single still. "
+        "Mark dialogue, subtitle and scene_continuity UNVERIFIED for a single still. "
+        "Story deviation can be judged only for facts directly visible in this shot. "
         "A null character_count_expected means no count was specified; mark character_count UNVERIFIED. "
-        "Do not invent continuity, story or dialogue evidence. "
+        "Do not invent continuity, story or dialogue evidence. Judge only material, directly visible contradictions. "
+        "Mark visual_defect FAIL only for objective image defects such as duplicated anatomy, malformed objects, or corrupted pixels; artistic lighting and reflections alone are not defects. "
+        "A dry interior may be visible through a rainy exterior window. A clock face is not reliable evidence of actual time of day. "
+        "A widespread power outage can leave isolated buildings or emergency lights on; it does not mean total darkness unless the shot context says so. "
+        "A full moon can be visible before dawn. Do not infer the cause of a light from its appearance alone. "
         "Shot context: " + json.dumps(context, ensure_ascii=False)
     )
     response = httpx.post(
@@ -75,7 +80,7 @@ def _visual_inspection(shot: Shot, frame: bytes) -> dict:
             content = content[4:].strip()
     raw = json.loads(content)
     checks = {key: value if value in {"PASS", "FAIL", "UNVERIFIED"} else "UNVERIFIED" for key, value in ((key, raw.get("checks", {}).get(key)) for key in CHECKS)}
-    for key in ("dialogue", "subtitle", "scene_continuity", "story_deviation"):
+    for key in ("dialogue", "subtitle", "scene_continuity"):
         checks[key] = "UNVERIFIED"
     if not shot.character_ids:
         checks["character_count"] = "UNVERIFIED"

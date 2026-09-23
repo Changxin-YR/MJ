@@ -25,7 +25,8 @@ def main() -> None:
             output = db.scalar(select(GenerationOutput).where(GenerationOutput.job_id == job.id))
             asset = db.get(Asset, output.asset_id)
             shot = db.get(Shot, job.resource_id)
-            targets.append((job.id, job.trace_id, job.workspace_id, shot, asset))
+            if shot.current_video_asset_id == asset.id:
+                targets.append((job.id, job.trace_id, job.workspace_id, shot, asset))
         for _, _, _, shot, asset in targets:
             db.expunge(shot)
             db.expunge(asset)

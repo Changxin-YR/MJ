@@ -35,6 +35,16 @@ def timeline_data(db: Session, timeline: Timeline) -> dict:
     return {"id": timeline.id, "episode_id": timeline.episode_id, "status": timeline.status, "version": timeline.version, "final_asset_id": timeline.final_asset_id, "tracks": [{"id": t.id, "kind": t.kind, "order_no": t.order_no} for t in tracks], "items": [{"id": i.id, "track_id": i.track_id, "shot_id": i.shot_id, "asset_id": i.asset_id, "start_seconds": i.start_seconds, "duration_seconds": i.duration_seconds, "text": i.text} for i in items]}
 
 
+def reviewed_video(shot: Shot, asset_id: str) -> bool:
+    inspection = shot.inspection_json or {}
+    override = inspection.get("review_override") or {}
+    return shot.status in {"APPROVED", "LOCKED"} and shot.current_video_asset_id == asset_id and (
+        inspection.get("status") == "PASS" or (
+            inspection.get("status") == "FAIL" and override.get("video_asset_id") == asset_id and bool(override.get("reason"))
+        )
+    )
+
+
 @router.post("/episodes/{episode_id}/timeline")
 def create_timeline(episode_id: str, request: Request, scope: ProjectScope = Depends(project_scope), db: Session = Depends(get_db)):
     require(scope, "timeline.edit")
@@ -71,7 +81,7 @@ def sync_timeline(timeline_id: str, payload: VersionPayload, request: Request, s
     if timeline.version != payload.expected_version:
         raise APIError("RESOURCE_VERSION_CONFLICT", "Timeline changed", 409)
     shots = db.scalars(select(Shot).join(Scene, Scene.id == Shot.scene_id).where(Shot.workspace_id == scope.workspace_id, Shot.project_id == scope.project_id, Shot.episode_id == timeline.episode_id, Scene.workspace_id == scope.workspace_id, Scene.project_id == scope.project_id).order_by(Scene.scene_no, Shot.shot_no)).all()
-    if not shots or any(s.status not in {"APPROVED", "LOCKED"} or not s.current_video_asset_id for s in shots):
+    if not shots or any(not s.current_video_asset_id or not reviewed_video(s, s.current_video_asset_id) for s in shots):
         raise APIError("RESOURCE_CONFLICT", "Every shot needs an approved video", 409)
     tracks = {t.kind: t for t in db.scalars(select(TimelineTrack).where(TimelineTrack.workspace_id == scope.workspace_id, TimelineTrack.project_id == scope.project_id, TimelineTrack.timeline_id == timeline.id)).all()}
     db.execute(delete(TimelineItem).where(TimelineItem.workspace_id == scope.workspace_id, TimelineItem.project_id == scope.project_id, TimelineItem.timeline_id == timeline.id))
@@ -101,6 +111,10 @@ def render(timeline_id: str, payload: VersionPayload, request: Request, scope: P
     tracks = {t.id: t.kind for t in db.scalars(select(TimelineTrack).where(TimelineTrack.workspace_id == scope.workspace_id, TimelineTrack.project_id == scope.project_id, TimelineTrack.timeline_id == timeline.id)).all()}
     items = db.scalars(select(TimelineItem).where(TimelineItem.workspace_id == scope.workspace_id, TimelineItem.project_id == scope.project_id, TimelineItem.timeline_id == timeline.id).order_by(TimelineItem.start_seconds)).all()
     video_items = [i for i in items if tracks[i.track_id] == "VIDEO"]
+    for item in video_items:
+        shot = scoped_get(db, Shot, item.shot_id, scope)
+        if not reviewed_video(shot, item.asset_id):
+            raise APIError("RESOURCE_CONFLICT", "Timeline video changed or needs review", 409)
     voice_by_shot = {i.shot_id: i.asset_id for i in items if tracks[i.track_id] == "VOICE"}
     subtitle_by_shot = {i.shot_id: i.text for i in items if tracks[i.track_id] == "SUBTITLE"}
     clips = []
