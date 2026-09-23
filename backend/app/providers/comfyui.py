@@ -12,6 +12,7 @@ from app.providers.base import MediaResult
 
 WORKFLOW_ID = "basic-t2i-v1"
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
+PRIVATE_SERVICE_URLS = {"http://comfyui:8188", "http://host.docker.internal:8189"}
 
 
 def client_factory() -> httpx.Client:
@@ -38,8 +39,8 @@ def controlled_workflow(prompt: str, negative_prompt: str, checkpoint: str, seed
 
 class ComfyUIImageProvider:
     def generate(self, prompt: str, negative_prompt: str = "") -> MediaResult:
-        if settings.comfyui_url.rstrip("/") != "http://comfyui:8188":
-            raise ValueError("ComfyUI must use the private Compose service address")
+        if settings.comfyui_url.rstrip("/") not in PRIVATE_SERVICE_URLS:
+            raise ValueError("ComfyUI must use an approved private service address")
         workflow = controlled_workflow(prompt, negative_prompt, settings.comfyui_checkpoint, secrets.randbelow(2**63))
         with client_factory() as client:
             queued = client.post("/prompt", json={"prompt": workflow, "client_id": str(uuid4())})
@@ -47,7 +48,7 @@ class ComfyUIImageProvider:
             prompt_id = queued.json()["prompt_id"]
             if not re.fullmatch(r"[0-9a-fA-F-]{36}", prompt_id):
                 raise ValueError("ComfyUI returned invalid prompt ID")
-            deadline = time.monotonic() + 180
+            deadline = time.monotonic() + 300
             image_info = None
             while time.monotonic() < deadline:
                 response = client.get(f"/history/{prompt_id}")

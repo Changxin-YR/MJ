@@ -1,3 +1,4 @@
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -12,6 +13,10 @@ def test_render_approved_timeline_to_playable_mp4():
     client = TestClient(app)
     _, token = register(client, "timeline")
     prefix, shot = make_ready_shot(client, token)
+    sentinel = Path(f"/tmp/frameforge-ffmpeg-injection-{uuid4().hex}")
+    code, body = call(client, "PATCH", f"{prefix}/shots/{shot['id']}", token, json={"expected_version": shot["version"], "dialogue": f"The city is waking up;$(touch {sentinel})"})
+    assert code == 200, body
+    shot = body["data"]
     for kind in ("IMAGE", "VIDEO", "VOICE"):
         code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": kind, "idempotency_key": str(uuid4())})
         assert code == 200, body
@@ -34,3 +39,4 @@ def test_render_approved_timeline_to_playable_mp4():
     final_asset_id = body["data"]["final_asset_id"]
     response = client.get(f"{prefix}/assets/{final_asset_id}/content", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200 and response.content[4:8] == b"ftyp"
+    assert not sentinel.exists()

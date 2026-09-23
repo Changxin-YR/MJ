@@ -9,3 +9,5 @@ frontend/dist/
 test-results/
 playwright-report/
 artifacts/
+.local/
+.firecrawl/

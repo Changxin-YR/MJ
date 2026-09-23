@@ -220,6 +220,16 @@ class GenerationJob(IdMixin, ScopeMixin, Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
+class ProviderCallbackReceipt(IdMixin, ScopeMixin, Base):
+    __tablename__ = "provider_callback_receipts"
+    __table_args__ = (UniqueConstraint("provider", "nonce", name="uq_provider_callback_nonce"),)
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    nonce: Mapped[str] = mapped_column(String(128), nullable=False)
+    generation_job_id: Mapped[str] = mapped_column(String(36), ForeignKey("generation_jobs.id"), nullable=False)
+    remote_job_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    received_status: Mapped[str] = mapped_column(String(30), nullable=False)
+
+
 class GenerationOutput(IdMixin, ScopeMixin, Base):
     __tablename__ = "generation_outputs"
     job_id: Mapped[str] = mapped_column(String(36), ForeignKey("generation_jobs.id"), nullable=False)

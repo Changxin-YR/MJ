@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     dashscope_llm_model: str = "qwen-plus"
     comfyui_url: str = "http://comfyui:8188"
     comfyui_checkpoint: str = ""
+    provider_callback_secret: str = ""
+    provider_callback_max_skew_seconds: int = 300
 
 
 settings = Settings()

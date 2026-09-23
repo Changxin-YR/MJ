@@ -44,3 +44,11 @@ def test_comfyui_rejects_workflow_escape_and_external_host(monkeypatch):
     monkeypatch.setattr(settings, "comfyui_checkpoint", "approved-model.safetensors")
     with pytest.raises(ValueError):
         comfyui.ComfyUIImageProvider().generate("one courier")
+
+
+def test_comfyui_accepts_only_private_local_bridge(monkeypatch):
+    monkeypatch.setattr(settings, "comfyui_url", "http://host.docker.internal:8189")
+    monkeypatch.setattr(settings, "comfyui_checkpoint", "approved-model.safetensors")
+    monkeypatch.setattr(comfyui, "client_factory", lambda: (_ for _ in ()).throw(RuntimeError("private bridge reached")))
+    with pytest.raises(RuntimeError, match="private bridge reached"):
+        comfyui.ComfyUIImageProvider().generate("courier")

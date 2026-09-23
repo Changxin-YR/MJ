@@ -33,6 +33,25 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-change-minio-secret}
     ports: ["127.0.0.1:29000:9000", "127.0.0.1:29001:9001"]
     volumes: [minio_data:/data]
+  comfyui:
+    profiles: ["comfyui"]
+    build:
+      context: .local/comfyui-source
+      dockerfile: ../../ops/comfyui/Dockerfile
+    gpus: all
+    shm_size: "1gb"
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - ${COMFYUI_MODELS_PATH:-./.local/comfyui-models/checkpoints}:/opt/ComfyUI/models/checkpoints:ro
+      - comfyui_output:/opt/ComfyUI/output
+      - comfyui_user:/opt/ComfyUI/user
+      - comfyui_temp:/opt/ComfyUI/temp
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8188/system_stats', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
   api:
     build: ./backend
     env_file: .env
@@ -66,3 +85,6 @@ volumes:
   redis_data:
   qdrant_data:
   minio_data:
+  comfyui_output:
+  comfyui_user:
+  comfyui_temp:

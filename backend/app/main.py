@@ -16,6 +16,7 @@ from app.auth.routes import router as auth_router
 from app.character.routes import router as character_router
 from app.config import settings
 from app.db import engine
+from app.generation.callbacks import router as callback_router
 from app.generation.routes import router as generation_router
 from app.rag.routes import router as rag_router
 from app.story.routes import router as story_router
@@ -75,6 +76,7 @@ app.include_router(character_router, prefix="/api/v1")
 app.include_router(storyboard_router, prefix="/api/v1")
 app.include_router(rag_router, prefix="/api/v1")
 app.include_router(generation_router, prefix="/api/v1")
+app.include_router(callback_router, prefix="/api/v1")
 app.include_router(asset_router, prefix="/api/v1")
 app.include_router(agent_router, prefix="/api/v1")
 app.include_router(timeline_router, prefix="/api/v1")

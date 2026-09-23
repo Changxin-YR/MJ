@@ -19,10 +19,10 @@
 | 60 秒真实成片、时间线、字幕 | `app/timeline/`、`scripts/final_demo.py` | `test_timeline_flow.py`、`scripts/rerender_demo.py` | [final.mp4](../evidence/final-demo/final.mp4)、[render report](../evidence/final-demo/rerender-report.json)：60.000 秒、1280×720、H.264/AAC；[中文字幕抽帧](../evidence/final-demo/frame-subtitle.png) | PASS（媒体生成） |
 | 资产血缘与审计 | `app/asset/routes.py`、`app/audit/` | Final Demo 脚本 | [lineage.json](../evidence/final-demo/lineage.json)；初次全链路报告记录 146 条审计事件 | PASS |
 | 前端构建与核心 E2E | `frontend/src/`、`frontend/e2e/` | `npm run build`、`npm run e2e` | 注册到分镜、生成、审核、时间线、播放成片的浏览器流程；Director→PendingAction→Approve→Resume 流程均通过；[界面截图](../evidence/ui-final.png) | PASS（2 条 E2E） |
-| ComfyUI 安全适配器 | `app/providers/comfyui.py` | `test_comfyui_adapter.py` | 固定节点、内网地址、受控参数与输出路径契约测试通过；无真实实例运行证据 | PARTIALLY IMPLEMENTED |
-| Provider Callback 防重放 | — | — | 当前使用主动轮询，不接收云回调 | NOT IMPLEMENTED |
+| ComfyUI 私有实例与安全适配器 | `app/providers/comfyui.py`、`ops/comfyui/`、`scripts/start-comfyui-local.ps1` | `test_comfyui_adapter.py`、`scripts/comfyui_smoke.py`、`scripts/comfyui_job_smoke.py` | [适配器实图](../evidence/comfyui-live/sample.png)、[实图报告](../evidence/comfyui-live/report.json)、[完整 Job 链路](../evidence/comfyui-live/job-report.json)：RTX 4060 上 1024×576 实图，API→Outbox→Worker→ComfyUI→MinIO 成功；可选 Compose 镜像尚未完成运行验证 | PASS（本机私有实例） |
+| Provider Callback 防重放 | `app/generation/callbacks.py`、`provider_callback_receipts` 迁移 | `test_provider_callback.py` | HMAC、时间窗、持久化 nonce、Provider/remote job/状态绑定测试通过；合法回调只写 Outbox 唤醒 Worker，不直接完成任务；原生 DashScope 仍由轮询处理 | PASS（受信任中继协议） |
 | Agent Eval 固定数据集 | `backend/evals/cases.json`、`backend/tests/test_agent_eval.py` | `scripts/agent_eval_report.py` | [agent eval report](../evidence/agent-eval/report.json)：七类固定规则用例 7/7 PASS；不涵盖开放式模型回答质量 | PASS（规则用例） |
-| 完整安全与故障矩阵 | `backend/tests/` 部分覆盖 | 角色、Scope、上传、路径穿越、注入、幂等、并发预算测试 | Callback 重放、Provider 故障及独立 FFmpeg 注入用例未全覆盖 | PARTIALLY IMPLEMENTED |
+| 安全与故障矩阵 | `backend/tests/` | 角色横向/纵向权限、RAG 隔离、工具权限、上传/路径穿越、Prompt Injection、Callback Replay、FFmpeg 注入、幂等、预算、Provider 熔断与临时/永久失败 | 后端 32 项测试覆盖列出的规则场景；本地 MySQL 迁移与 `alembic check` 通过 | PASS（列出的规则用例） |
 | Playwright Flow C | `frontend/src/views/project/DirectorPanel.vue` | `frontend/e2e/director-approval.spec.ts` | Director 提交生成请求，待审批后批准并继续，生成任务出现 | PASS |
 
 ## 真实成片说明
@@ -33,4 +33,4 @@
 
 ## 最终门禁
 
-当前不能标记 `FRAMEFORGE V1 COMPLETE`。ComfyUI Adapter 尚无真实实例验证，Callback 安全与完整安全测试矩阵尚未达到验收条件，视觉复检也留下四个待处理镜头。固定 Agent Eval 的规则用例已通过，但开放式回答质量尚未评价。已通过的真实 Provider 和 60 秒成片证明主流程可运行，但不替代上述门禁。
+当前不能标记 `FRAMEFORGE V1 COMPLETE`。逐视频视觉复检仍有四个待处理镜头；固定 Agent Eval 的规则用例已通过，但开放式回答质量尚未评价。ComfyUI 的本机私有实例和完整 Job 链路已验证，可选 Compose 容器仍需完成镜像构建与出图验证。已通过的真实 Provider 和 60 秒成片证明主流程可运行，但不替代上述门禁。

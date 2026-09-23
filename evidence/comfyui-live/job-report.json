@@ -1,0 +1,12 @@
+{
+  "verified_at_utc": "2026-09-23T06:48:54.046226+00:00",
+  "project_id": "ed9d5e58-6a9b-444c-aff1-9b562d6fe39c",
+  "shot_id": "7c0053f4-b019-4b8c-81cb-35e70c7db6e8",
+  "job_id": "e9bc0938-e241-410f-9eb6-dcdf902b8b34",
+  "provider": "comfyui",
+  "status": "SUCCEEDED",
+  "asset_id": "12da46d4-d275-459f-940f-354ec7b383b2",
+  "asset_bytes": 707335,
+  "asset_sha256": "1ce3fa7056696420b25aba5ea265bd7a541539e3fe0fc8219011d88e06442581",
+  "result": "PASS"
+}

@@ -14,6 +14,8 @@ Open `http://localhost:28080`. API documentation is at `http://localhost:28080/a
 
 首次账号可在注册页创建。默认使用 FakeProvider；真实多模态能力需要配置 `.env` 中的 `DASHSCOPE_API_KEY` 并将 `PROVIDER_MODE` 改为 `dashscope`。真实语义检索设置 `EMBEDDING_MODE=dashscope`，真实 Director 分析设置 `DIRECTOR_LLM_MODE=dashscope`。变更向量模型后，对故事重新执行索引。
 
+本地 ComfyUI 出图与可选私有 Compose 实例见 [ComfyUI 配置](docs/comfyui.md)。Provider 回调中继的签名协议见 [Callback 协议](docs/provider-callback.md)。
+
 ## Verification
 
 ```powershell

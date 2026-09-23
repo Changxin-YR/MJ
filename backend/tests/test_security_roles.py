@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
 from test_core_flow import call, register
 from test_generation_flow import make_ready_shot
@@ -25,6 +27,10 @@ def test_viewer_editor_and_cross_project_boundaries():
 
     code, body = call(client, "POST", prefix + f"/shots/{shot['id']}/generations", viewer, json={"kind": "IMAGE", "idempotency_key": "viewer-denied-1"})
     assert code == 403 and body["error"]["code"] == "PERMISSION_DENIED"
+    code, body = call(client, "POST", prefix + f"/pending-actions/{uuid4()}/approve", viewer)
+    assert code == 403 and body["error"]["code"] == "PERMISSION_DENIED"
+    code, body = call(client, "POST", prefix + "/members", editor, json={"email": viewer_email, "role": "OWNER"})
+    assert code == 403 and body["error"]["code"] == "PERMISSION_DENIED"
 
     with SessionLocal() as db:
         row = db.get(Shot, shot["id"])
@@ -37,4 +43,28 @@ def test_viewer_editor_and_cross_project_boundaries():
     code, body = call(client, "GET", prefix + f"/shots/{shot['id']}", stranger)
     assert code == 404 and body["error"]["code"] == "RESOURCE_NOT_FOUND"
     code, body = call(client, "GET", f"/api/v1/projects/{project_id}", stranger)
+    assert code == 404 and body["error"]["code"] == "RESOURCE_NOT_FOUND"
+
+
+def test_workspace_member_cannot_access_another_project_in_same_workspace():
+    client = TestClient(app)
+    _, owner = register(client, "same-workspace-owner")
+    member_email, member = register(client, "same-workspace-member")
+    code, body = call(client, "POST", "/api/v1/workspaces", owner, json={"name": "Isolated Workspace"})
+    assert code == 200, body
+    workspace = body["data"]["id"]
+    projects = []
+    for name in ("Allowed", "Private"):
+        code, body = call(client, "POST", f"/api/v1/workspaces/{workspace}/projects", owner, json={"name": name})
+        assert code == 200, body
+        projects.append(body["data"]["id"])
+    code, body = call(client, "POST", f"/api/v1/workspaces/{workspace}/members", owner, json={"email": member_email, "role": "MEMBER"})
+    assert code == 200, body
+    code, body = call(client, "POST", f"/api/v1/projects/{projects[0]}/members", owner, json={"email": member_email, "role": "EDITOR"})
+    assert code == 200, body
+    code, body = call(client, "GET", f"/api/v1/projects/{projects[0]}", member)
+    assert code == 200, body
+    code, body = call(client, "GET", f"/api/v1/projects/{projects[1]}", member)
+    assert code == 404 and body["error"]["code"] == "RESOURCE_NOT_FOUND"
+    code, body = call(client, "POST", f"/api/v1/projects/{projects[1]}/stories", member, json={"title": "stolen", "content": "private"})
     assert code == 404 and body["error"]["code"] == "RESOURCE_NOT_FOUND"

@@ -29,12 +29,12 @@ class ProviderEntry:
 class ProviderRegistry:
     def __init__(self):
         real_enabled = bool(settings.dashscope_api_key) and settings.provider_mode in {"dashscope", "auto"}
-        fake_enabled = settings.provider_mode in {"fake", "auto"}
+        fake_enabled = settings.provider_mode in {"fake", "auto", "comfyui"}
         comfy_enabled = bool(settings.comfyui_checkpoint) and settings.provider_mode in {"comfyui", "auto"}
         self.entries = {
             "fake": ProviderEntry("fake", fake_enabled, {"IMAGE", "VIDEO", "VOICE"}, 100, {"IMAGE": 0.0, "VIDEO": 0.0, "VOICE": 0.0}),
             "dashscope": ProviderEntry("dashscope", real_enabled, {"IMAGE", "VIDEO", "VOICE"}, 10, {"IMAGE": 0.20, "VIDEO": 0.15, "VOICE": 0.05}),
-            "comfyui": ProviderEntry("comfyui", comfy_enabled, {"IMAGE"}, 20, {"IMAGE": 0.20}),
+            "comfyui": ProviderEntry("comfyui", comfy_enabled, {"IMAGE"}, 5, {"IMAGE": 0.20}),
         }
         self.adapters = {
             "fake": {"IMAGE": FakeImageProvider(), "VIDEO": FakeVideoProvider(), "VOICE": FakeTTSProvider()},
