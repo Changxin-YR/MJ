@@ -322,3 +322,14 @@ def test_neighbor_expansion_does_not_merge_separate_dialogue_runs():
     assert result["chunk_kind"] == "dialogue"
     assert "第三块砖下" in result["text"]
     assert "黄芽参" not in result["text"]
+
+
+
+def test_pronouns_are_not_promoted_to_stable_speaker_identities():
+    records = build_chunk_records("""我问：“你确定吗？”
+“确定。”
+“为什么？”
+“因为门后有人。”""")
+    dialogue = [record for record in records if record["chunk_kind"] == "dialogue"]
+    assert dialogue
+    assert all("我" not in record.get("speaker_hints", []) for record in dialogue)
