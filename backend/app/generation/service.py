@@ -12,7 +12,6 @@ from app.models import GenerationJob, OutboxEvent, Project, Shot
 from app.providers.registry import registry
 from app.storyboard.state import transition_job, transition_shot
 
-
 CHINESE_VISUAL_RULE = (
     "硬性语言约束：画面中如果出现任何可读文字、招牌、标识、字幕或拟声词，"
     "只能使用简体中文（允许阿拉伯数字和常规标点）；禁止日文假名、韩文、英文单词和乱码。"
