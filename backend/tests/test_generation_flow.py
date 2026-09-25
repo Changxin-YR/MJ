@@ -124,3 +124,82 @@ def test_voice_check_preserves_visual_failure_and_review_requires_reason():
     code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/transition", token, json={"expected_version": shot["version"], "target": "APPROVED", "review_reason": "I inspected the full video and confirmed one character."})
     assert code == 200 and body["data"]["status"] == "APPROVED"
     assert body["data"]["inspection_json"]["review_override"]["reason"] == "I inspected the full video and confirmed one character."
+
+
+
+def test_generation_job_uses_active_character_dna_in_real_prompt():
+    client = TestClient(app)
+    _, token = register(client, "character-prompt")
+    prefix, shot = make_ready_shot(client, token)
+    code, body = call(client, "POST", prefix + "/characters", token, json={
+        "name": "林舟",
+        "background": "城市信使",
+        "dna": {
+            "face": "清晰的东方青年面孔",
+            "hair": "短黑发",
+            "costume": "深蓝风衣",
+            "style": "电影感国漫",
+            "prompt_anchor": "林舟始终穿深蓝风衣，短黑发",
+            "negative_prompt": "金色长发，日式校服",
+        },
+    })
+    assert code == 200, body
+    character = body["data"]
+    version_id = character["versions"][0]["id"]
+    code, body = call(client, "POST", f"{prefix}/characters/{character['id']}/versions/{version_id}/activate", token, json={"expected_version": character["version"]})
+    assert code == 200, body
+
+    code, body = call(client, "PATCH", f"{prefix}/shots/{shot['id']}", token, json={"expected_version": shot["version"], "character_ids": [character["id"]]})
+    assert code == 200, body
+    shot = body["data"]
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": "IMAGE", "idempotency_key": str(uuid4())})
+    assert code == 200, body
+    with SessionLocal() as db:
+        job = db.get(GenerationJob, body["data"]["id"])
+        assert "林舟始终穿深蓝风衣，短黑发" in job.input_json["prompt"]
+        assert "深蓝风衣" in job.input_json["prompt"]
+        assert "金色长发，日式校服" in job.input_json["negative_prompt"]
+
+
+def test_editing_approved_shot_invalidates_derived_media_and_review():
+    client = TestClient(app)
+    _, token = register(client, "stale-media")
+    prefix, shot = make_ready_shot(client, token)
+    for kind in ("IMAGE", "VIDEO", "VOICE"):
+        code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": kind, "idempotency_key": str(uuid4())})
+        assert code == 200, body
+        process_generation(body["data"]["id"])
+        code, body = call(client, "GET", f"{prefix}/shots/{shot['id']}", token)
+        assert code == 200, body
+        shot = body["data"]
+
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/transition", token, json={"expected_version": shot["version"], "target": "APPROVED"})
+    assert code == 200, body
+    approved = body["data"]
+    assert approved["current_image_asset_id"] and approved["current_video_asset_id"] and approved["current_audio_asset_id"]
+
+    code, body = call(client, "PATCH", f"{prefix}/shots/{shot['id']}", token, json={
+        "expected_version": approved["version"],
+        "description": "完全不同的新画面",
+        "dialogue": "这是修改后的全新对白。",
+    })
+    assert code == 200, body
+    edited = body["data"]
+    assert edited["status"] == "PLANNED"
+    assert edited["current_image_asset_id"] is None
+    assert edited["current_video_asset_id"] is None
+    assert edited["current_audio_asset_id"] is None
+    assert edited["inspection_json"] is None
+
+
+def test_shot_cannot_be_edited_while_generation_is_running():
+    client = TestClient(app)
+    _, token = register(client, "edit-during-generation")
+    prefix, shot = make_ready_shot(client, token)
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": "IMAGE", "idempotency_key": str(uuid4())})
+    assert code == 200, body
+    code, body = call(client, "GET", f"{prefix}/shots/{shot['id']}", token)
+    assert code == 200 and body["data"]["status"] == "GENERATING"
+    generating = body["data"]
+    code, body = call(client, "PATCH", f"{prefix}/shots/{shot['id']}", token, json={"expected_version": generating["version"], "description": "不应在生成中被修改"})
+    assert code == 409 and body["error"]["code"] == "RESOURCE_CONFLICT"
