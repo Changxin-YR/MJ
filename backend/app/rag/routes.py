@@ -36,6 +36,66 @@ def index(story_id: str, request: Request, scope: ProjectScope = Depends(project
     return ok(request, {"document_id": document.id, "version_id": document.current_version_id})
 
 
+@router.post("/reindex-stories")
+def reindex_stories(
+    request: Request,
+    scope: ProjectScope = Depends(project_scope),
+    db: Session = Depends(get_db),
+):
+    require(scope, "story.edit")
+    story_ids = db.scalars(
+        select(StorySource.id)
+        .where(
+            StorySource.workspace_id == scope.workspace_id,
+            StorySource.project_id == scope.project_id,
+            StorySource.status == "ACTIVE",
+        )
+        .order_by(StorySource.created_at)
+    ).all()
+    indexed: list[str] = []
+    failed: list[dict] = []
+    for story_id in story_ids:
+        try:
+            story = db.scalar(
+                select(StorySource)
+                .where(
+                    StorySource.id == story_id,
+                    StorySource.workspace_id == scope.workspace_id,
+                    StorySource.project_id == scope.project_id,
+                )
+                .with_for_update()
+            )
+            if not story:
+                continue
+            document = index_story(db, story)
+            record(
+                db,
+                actor_type="USER",
+                actor_id=scope.user_id,
+                action="knowledge.reindex",
+                resource_type="knowledge_document",
+                resource_id=document.id,
+                workspace_id=scope.workspace_id,
+                project_id=scope.project_id,
+                trace_id=trace_id(request),
+                safe_summary=f"story:{story.id}",
+            )
+            db.commit()
+            indexed.append(story.id)
+        except Exception as error:
+            db.rollback()
+            failed.append({"story_id": story_id, "error": type(error).__name__})
+    return ok(
+        request,
+        {
+            "total": len(story_ids),
+            "indexed": indexed,
+            "failed": failed,
+            "embedding_profile_rebuild": True,
+        },
+    )
+
+
 @router.post("/search")
 def search(payload: Query, request: Request, scope: ProjectScope = Depends(project_scope)):
     require(scope, "project.read")
