@@ -106,29 +106,39 @@ def test_media_inspector_checks_visible_text_language():
 
 def test_dashscope_embedding_batches_texts_and_preserves_order(monkeypatch):
     monkeypatch.setattr(settings, "dashscope_api_key", "test-key")
-    captured = {}
+    captured = []
 
     class Response:
+        def __init__(self, rows):
+            self.rows = rows
+
         def raise_for_status(self):
             return None
 
         def json(self):
-            return {
-                "data": [
-                    {"index": 1, "embedding": [2.0] * 1024},
-                    {"index": 0, "embedding": [1.0] * 1024},
-                ]
-            }
+            return {"output": {"embeddings": self.rows}}
 
     def fake_post(url, *, headers, json, timeout):
-        captured.update({"url": url, "headers": headers, "json": json, "timeout": timeout})
-        return Response()
+        captured.append({"url": url, "headers": headers, "json": json, "timeout": timeout})
+        rows = [
+            {"text_index": index, "embedding": [float(index + 1)] * 1024}
+            for index, _ in enumerate(json["input"]["texts"])
+        ]
+        return Response(list(reversed(rows)))
 
     monkeypatch.setattr(embeddings.httpx, "post", fake_post)
     provider = embeddings.DashScopeEmbeddingProvider()
-    vectors = provider.embed_many(["第一段中文", "第二段中文"])
-    assert captured["json"]["input"] == ["第一段中文", "第二段中文"]
-    assert captured["json"]["dimensions"] == 1024
+    vectors = provider.embed_many(["第一段中文", "第二段中文"], text_type="document")
+    assert captured[-1]["url"].endswith("/services/embeddings/text-embedding/text-embedding")
+    assert captured[-1]["json"]["input"]["texts"] == ["第一段中文", "第二段中文"]
+    assert captured[-1]["json"]["parameters"]["dimension"] == 1024
+    assert captured[-1]["json"]["parameters"]["text_type"] == "document"
+    assert "instruct" not in captured[-1]["json"]["parameters"]
     assert len(vectors) == 2
     assert vectors[0][0] == 1.0
     assert vectors[1][0] == 2.0
+
+    query_vector = provider.embed("顾七为什么要进石门？", text_type="query")
+    assert query_vector[0] == 1.0
+    assert captured[-1]["json"]["parameters"]["text_type"] == "query"
+    assert "Chinese fiction" in captured[-1]["json"]["parameters"]["instruct"]
