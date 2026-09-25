@@ -38,7 +38,7 @@ def client() -> QdrantClient:
 def ensure_collection(q: QdrantClient, name: str, dimensions: int) -> None:
     if not q.collection_exists(name):
         q.create_collection(name, vectors_config=models.VectorParams(size=dimensions, distance=models.Distance.COSINE))
-    keyword_fields = ("workspace_id", "project_id", "document_id", "version_id", "source_type", "source_id", "status", "chunk_kind")
+    keyword_fields = ("workspace_id", "project_id", "document_id", "version_id", "source_type", "source_id", "status", "chunk_kind", "dialogue_run_id")
     for field in keyword_fields:
         try:
             q.create_payload_index(name, field, models.PayloadSchemaType.KEYWORD, wait=True)
@@ -200,6 +200,7 @@ def build_chunk_records(text: str, known_speakers: list[str] | None = None) -> l
                 record["dialogue_anchor_text"] = anchor_text
                 record["dialogue_run_start"] = run_start
                 record["dialogue_run_end"] = run_end - 1
+                record["dialogue_run_id"] = f"{run_start}:{run_end - 1}"
             records.extend(dialogue_records)
         cursor = max(run_end, dialogue_start + 1)
 
@@ -358,6 +359,7 @@ def index_story(db: Session, story: StorySource) -> KnowledgeDocument:
                 "dialogue_anchor_text": record.get("dialogue_anchor_text", ""),
                 "dialogue_run_start": record.get("dialogue_run_start"),
                 "dialogue_run_end": record.get("dialogue_run_end"),
+                "dialogue_run_id": record.get("dialogue_run_id", ""),
                 "core_text": record["core_text"],
                 "text": record["text"],
             },
@@ -441,6 +443,14 @@ def _expand_neighbor_context(q: QdrantClient, name: str, payload: dict) -> tuple
         models.FieldCondition(key="unit_start", range=models.Range(lte=current_end + radius)),
         models.FieldCondition(key="unit_end", range=models.Range(gte=max(0, current_start - radius))),
     ]
+    dialogue_run_id = str(payload.get("dialogue_run_id") or "")
+    if payload.get("chunk_kind") == "dialogue" and dialogue_run_id:
+        filters.append(
+            models.FieldCondition(
+                key="dialogue_run_id",
+                match=models.MatchValue(value=dialogue_run_id),
+            )
+        )
     neighbors, _ = q.scroll(
         collection_name=name,
         scroll_filter=models.Filter(must=filters),
