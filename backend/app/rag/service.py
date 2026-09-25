@@ -155,7 +155,7 @@ def _payload_tokens(text: str, limit: int = 512) -> list[str]:
 def _query_terms(query: str, limit: int = 40) -> list[str]:
     terms = _payload_tokens(query, limit=limit)
     # Preserve short Chinese character names such as 顾七 even if longer query terms exist.
-    named = re.findall(r"(?:^|[，。！？；、\\s])([\\u4e00-\\u9fff]{2,4})(?=问|说|答|道|回应|回答)", query)
+    named = re.findall(r"(?:^|[，。！？；、\s])([\u4e00-\u9fff]{2,4})(?=问|说|答|道|回应|回答)", query)
     for name in reversed(named):
         if name not in terms:
             terms.insert(0, name)
