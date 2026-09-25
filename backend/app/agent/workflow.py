@@ -77,7 +77,14 @@ def plan(state: DirectorState):
                 "request": state["request"][:1000],
                 "project": state["project_context"]["project"]["name"],
                 "shot_count": state["project_context"]["shot_count"],
-                "characters": [character["name"] for character in state["project_context"].get("characters", [])[:50]],
+                "characters": [
+                    {
+                        "name": character["name"],
+                        "background": character.get("background", "")[:500],
+                        "dna": character.get("dna", {}),
+                    }
+                    for character in state["project_context"].get("characters", [])[:30]
+                ],
                 "retrieved_sources": [
                     {
                         "text": source["text"][:1200],
