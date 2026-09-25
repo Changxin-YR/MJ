@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.db import SessionLocal
 from app.models import Character, KnowledgeDocument, KnowledgeVersion, StorySource
 from app.providers.embeddings import lexical_tokens, selected_embedding_provider
 
@@ -409,6 +410,18 @@ def _embed_queries(provider, queries: list[str]) -> list[list[float]]:
     return [provider.embed(query) for query in queries]
 
 
+def _current_character_names(workspace_id: str, project_id: str) -> list[str]:
+    with SessionLocal() as db:
+        return list(
+            db.scalars(
+                select(Character.name).where(
+                    Character.workspace_id == workspace_id,
+                    Character.project_id == project_id,
+                )
+            ).all()
+        )
+
+
 def _center_clip(text: str, core_text: str, max_chars: int) -> str:
     if len(text) <= max_chars:
         return text
@@ -517,6 +530,7 @@ def retrieve(*, workspace_id: str, project_id: str, query: str, limit: int = 5) 
         ]
     )
     dialogue_query = _is_dialogue_query(query)
+    current_character_names = _current_character_names(workspace_id, project_id) if dialogue_query else []
     query_texts = [query]
     if dialogue_query:
         query_texts.append(f"{query}\n中文连续对白 说话人 回答 回应 前后文 省略主语")
@@ -550,6 +564,10 @@ def retrieve(*, workspace_id: str, project_id: str, query: str, limit: int = 5) 
         dialogue_boost = 0.08 if dialogue_query and payload.get("chunk_kind") == "dialogue" else 0.0
         subjectless_boost = 0.03 if dialogue_query and payload.get("has_subjectless_dialogue") else 0.0
         speaker_hints = [str(item) for item in (payload.get("speaker_hints") or [])]
+        if dialogue_query and current_character_names:
+            for speaker in _speaker_hints(context_text.split("\n"), current_character_names):
+                if speaker not in speaker_hints:
+                    speaker_hints.append(speaker)
         speaker_boost = 0.08 if dialogue_query and any(speaker and speaker in query for speaker in speaker_hints) else 0.0
         rerank_score = float(point.score) + 0.12 * lexical + exact_boost + dialogue_boost + subjectless_boost + speaker_boost
         ranked.append(
