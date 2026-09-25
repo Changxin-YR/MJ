@@ -530,6 +530,7 @@ def retrieve(*, workspace_id: str, project_id: str, query: str, limit: int = 5) 
         vector_score = dense_scores.get(point_id, 0.0)
         exact_boost = 0.12 if len(query_compact) >= 2 and query_compact in re.sub(r"\s+", "", context_text) else 0.0
         speaker_hints = [str(value) for value in payload.get("speaker_hints") or []]
+        speaker_anchors = [str(value) for value in payload.get("speaker_anchors") or []]
         speaker_boost = 0.12 if any(hint in query for hint in speaker_hints) else 0.0
         dialogue_boost = 0.09 if dialogue_query and payload.get("chunk_kind") == "dialogue" else 0.0
         rerank_score = max(vector_score, 0.78 * lexical) + exact_boost + speaker_boost + dialogue_boost
@@ -548,6 +549,7 @@ def retrieve(*, workspace_id: str, project_id: str, query: str, limit: int = 5) 
                 "unit_start": payload.get("unit_start"),
                 "unit_end": payload.get("unit_end"),
                 "speaker_hints": speaker_hints,
+                "speaker_anchors": speaker_anchors,
                 "retrieval_mode": "dense+lexical" if point_id in dense_scores and lexical > 0 else ("dense" if point_id in dense_scores else "lexical"),
             }
         )
