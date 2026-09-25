@@ -248,10 +248,21 @@ def index_story(db: Session, story: StorySource) -> KnowledgeDocument:
     ensure_collection(q, name, provider.dimensions)
     records = build_chunk_records(story.content)
 
+    vectors: list[list[float]] = []
+    batch_size = max(1, int(getattr(provider, "batch_size", 1)))
+    for start in range(0, len(records), batch_size):
+        batch = records[start:start + batch_size]
+        texts = [record["embedding_text"] for record in batch]
+        if hasattr(provider, "embed_many"):
+            vectors.extend(provider.embed_many(texts))
+        else:
+            vectors.extend(provider.embed(text) for text in texts)
+    if len(vectors) != len(records):
+        raise ValueError("Embedding provider returned an incomplete index batch")
     points = [
         models.PointStruct(
             id=str(uuid5(NAMESPACE_URL, f"{name}:{version.id}:{record['chunk_kind']}:{record['chunk_index']}")),
-            vector=provider.embed(record["embedding_text"]),
+            vector=vector,
             payload={
                 "workspace_id": story.workspace_id,
                 "project_id": story.project_id,
@@ -269,7 +280,7 @@ def index_story(db: Session, story: StorySource) -> KnowledgeDocument:
                 "text": record["text"],
             },
         )
-        for record in records
+        for record, vector in zip(records, vectors, strict=True)
     ]
     existing, _ = q.scroll(
         collection_name=name,
