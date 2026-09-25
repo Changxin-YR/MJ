@@ -63,6 +63,8 @@ test('story to reviewed media and rendered timeline', async ({ page }) => {
   await expect(page.getByText('待处理镜头')).toBeVisible()
   await page.getByRole('button', { name: /Shot 01/ }).click()
   await expect(page.getByText('Inspector')).toBeVisible()
+  await expect(page.locator('aside video')).toBeVisible()
+  await expect(page.locator('aside audio')).toBeVisible()
   await page.getByRole('button', { name: '通过' }).click()
   await page.locator('.sidebar').getByRole('link', { name: '时间线' }).click()
   await page.getByRole('button', { name: '创建时间线' }).click()
