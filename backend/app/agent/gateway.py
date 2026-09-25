@@ -13,11 +13,13 @@ from app.generation.service import job_data, request_generation
 from app.models import (
     AgentRun,
     Character,
+    CharacterRelationship,
     CharacterVersion,
     Episode,
     GenerationJob,
     PendingAction,
     Project,
+    ProjectBible,
     ProjectMember,
     ServerSession,
     Shot,
@@ -136,8 +138,46 @@ class ToolGateway:
                         )
                     ).all()
                 } if active_ids else {}
+                character_names = {character.id: character.name for character in characters}
+                bibles = db.scalars(
+                    select(ProjectBible)
+                    .where(
+                        ProjectBible.workspace_id == scope.workspace_id,
+                        ProjectBible.project_id == scope.project_id,
+                    )
+                    .order_by(ProjectBible.created_at)
+                ).all()
+                relationships = db.scalars(
+                    select(CharacterRelationship)
+                    .where(
+                        CharacterRelationship.workspace_id == scope.workspace_id,
+                        CharacterRelationship.project_id == scope.project_id,
+                    )
+                    .order_by(CharacterRelationship.created_at)
+                ).all()
                 result = {
                     "project": {"id": project.id, "name": project.name, "description": project.description, "settings": project.settings_json},
+                    "bibles": [
+                        {
+                            "id": item.id,
+                            "title": item.title,
+                            "content": item.content,
+                            "version": item.version,
+                        }
+                        for item in bibles
+                    ],
+                    "relationships": [
+                        {
+                            "id": item.id,
+                            "source_character_id": item.source_character_id,
+                            "source_character_name": character_names.get(item.source_character_id, ""),
+                            "target_character_id": item.target_character_id,
+                            "target_character_name": character_names.get(item.target_character_id, ""),
+                            "description": item.description,
+                            "version": item.version,
+                        }
+                        for item in relationships
+                    ],
                     "characters": [
                         {
                             "id": character.id,
