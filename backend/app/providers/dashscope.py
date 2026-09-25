@@ -2,6 +2,7 @@
 
 import base64
 import io
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -14,6 +15,12 @@ from app.config import settings
 from app.providers.base import MediaResult
 
 MAX_REMOTE_BYTES = 50 * 1024 * 1024
+FOREIGN_ASIAN_SCRIPT = re.compile(r"[\u3040-\u30ff\u31f0-\u31ff\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]")
+
+
+def _validate_chinese_tts_text(text: str) -> None:
+    if FOREIGN_ASIAN_SCRIPT.search(text):
+        raise ValueError("TTS dialogue contains Japanese or Korean script; Chinese-only voice generation is required")
 
 
 def _api(method: str, path: str, *, payload: dict | None = None, asynchronous: bool = False) -> dict:
@@ -66,7 +73,7 @@ class DashScopeImageProvider:
         body = _api("POST", "services/aigc/multimodal-generation/generation", payload={
             "model": settings.dashscope_image_model,
             "input": {"messages": [{"role": "user", "content": [{"text": prompt}]}]},
-            "parameters": {"prompt_extend": True, "watermark": False, "n": 1, "negative_prompt": negative_prompt, "size": settings.dashscope_image_size},
+            "parameters": {"prompt_extend": False, "watermark": False, "n": 1, "negative_prompt": negative_prompt, "size": settings.dashscope_image_size},
         })
         content = body["output"]["choices"][0]["message"]["content"]
         image_url = next(item["image"] for item in content if "image" in item)
@@ -83,7 +90,7 @@ class DashScopeVideoProvider:
         body = _api("POST", "services/aigc/video-generation/video-synthesis", asynchronous=True, payload={
             "model": settings.dashscope_video_model,
             "input": {"prompt": prompt, "img_url": f"data:image/png;base64,{encoded}"},
-            "parameters": {"resolution": "720P", "duration": max(2, min(15, round(duration))), "prompt_extend": True, "shot_type": "single", "audio": False},
+            "parameters": {"resolution": "720P", "duration": max(2, min(15, round(duration))), "prompt_extend": False, "shot_type": "single", "audio": False},
         })
         return body["output"]["task_id"]
 
@@ -104,9 +111,10 @@ class DashScopeVideoProvider:
 
 class DashScopeTTSProvider:
     def synthesize(self, text: str, duration: float) -> MediaResult:
+        _validate_chinese_tts_text(text)
         body = _api("POST", "services/aigc/multimodal-generation/generation", payload={
             "model": settings.dashscope_tts_model,
-            "input": {"text": text, "voice": "Cherry", "language_type": "Auto"},
+            "input": {"text": text, "voice": "Cherry", "language_type": "Chinese"},
         })
         audio = _download(body["output"]["audio"]["url"])
         with tempfile.TemporaryDirectory() as directory:
