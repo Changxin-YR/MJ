@@ -305,3 +305,14 @@ def test_chinese_speaker_hints_are_conservative():
     terms = rag_service._query_terms("顾七问青铜钥匙在哪里，对方怎么回答？")
     assert "顾七" in terms
     assert "对方怎么" not in terms
+
+
+
+def test_chinese_dialogue_segmentation_keeps_closing_quotes_attached():
+    records = build_chunk_records(
+        '顾七问：“还进去吗？”\n“进去。”\n沈青衡道：“钥匙还在里面。”'
+    )
+    texts = [record["core_text"] for record in records]
+    assert any('顾七问：“还进去吗？”' in text for text in texts)
+    assert all('？\n”' not in text for text in texts)
+    assert any('沈青衡道：“钥匙还在里面。”' in text for text in texts)
