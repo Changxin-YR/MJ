@@ -2,7 +2,7 @@ from datetime import timedelta
 
 import pytest
 
-from app.agent.inspector import CHECKS
+from app.agent.inspector import CHECKS, _frames
 from app.asset.storage import validate
 from app.config import settings
 from app.generation.service import apply_chinese_image_policy
@@ -20,6 +20,9 @@ def test_fake_media_providers_obey_contract():
     assert video_provider.get_status(task_id) == "SUCCEEDED"
     video = video_provider.fetch_result(task_id)
     assert validate(video)[2] >= 1.9
+    sampled = _frames(video)
+    assert len(sampled) == 4
+    assert all(frame.startswith(b"\xff\xd8") for frame in sampled)
     voice = FakeTTSProvider().synthesize("Hello", 2)
     assert validate(voice)[2] >= 1.9
     video_provider.cancel(task_id)
