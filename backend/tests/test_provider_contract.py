@@ -1,8 +1,9 @@
-from datetime import timedelta
 import io
 import wave
+from datetime import timedelta
 
 import pytest
+from PIL import Image
 
 from app.asset.storage import validate
 from app.config import settings
@@ -21,7 +22,7 @@ def test_fake_media_providers_obey_contract():
     assert video_provider.get_status(task_id) == "SUCCEEDED"
     video = video_provider.fetch_result(task_id)
     assert validate(video)[2] >= 1.9
-    voice = FakeTTSProvider().synthesize("Hello", 2)
+    voice = FakeTTSProvider().synthesize("城市醒来了。", 2)
     assert validate(voice)[2] >= 1.9
     video_provider.cancel(task_id)
 
@@ -73,7 +74,6 @@ def test_dashscope_chinese_media_controls(monkeypatch):
         return {"output": {"choices": [{"message": {"content": [{"image": "https://example.aliyuncs.com/image.png"}]}}]}}
 
     image_bytes = io.BytesIO()
-    from PIL import Image
     Image.new("RGB", (16, 16), "white").save(image_bytes, format="PNG")
 
     audio_bytes = io.BytesIO()
