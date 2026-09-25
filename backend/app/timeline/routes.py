@@ -48,7 +48,15 @@ def reviewed_video(shot: Shot, asset_id: str) -> bool:
 @router.post("/episodes/{episode_id}/timeline")
 def create_timeline(episode_id: str, request: Request, scope: ProjectScope = Depends(project_scope), db: Session = Depends(get_db)):
     require(scope, "timeline.edit")
-    scoped_get(db, Episode, episode_id, scope)
+    episode = db.scalar(
+        select(Episode).where(
+            Episode.id == episode_id,
+            Episode.workspace_id == scope.workspace_id,
+            Episode.project_id == scope.project_id,
+        ).with_for_update()
+    )
+    if not episode:
+        raise APIError("RESOURCE_NOT_FOUND", "Episode not found", 404)
     existing = db.scalar(select(Timeline).where(Timeline.workspace_id == scope.workspace_id, Timeline.project_id == scope.project_id, Timeline.episode_id == episode_id))
     if existing:
         return ok(request, timeline_data(db, existing))
