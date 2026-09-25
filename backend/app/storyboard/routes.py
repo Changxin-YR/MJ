@@ -8,7 +8,7 @@ from app.audit.service import record
 from app.auth.dependencies import ProjectScope, project_scope, require, scoped_get
 from app.db import get_db
 from app.generation.service import apply_chinese_image_policy, build_generation_prompt
-from app.models import Character, Episode, Scene, Shot, now
+from app.models import Character, Episode, Project, Scene, Shot, now
 from app.storyboard.state import transition_shot
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["storyboard"])
@@ -97,6 +97,14 @@ def validate_character_ids(db: Session, scope: ProjectScope, ids: list[str]):
 @router.post("/episodes")
 def create_episode(payload: EpisodeCreate, request: Request, scope: ProjectScope = Depends(project_scope), db: Session = Depends(get_db)):
     require(scope, "content.edit")
+    project = db.scalar(
+        select(Project).where(
+            Project.id == scope.project_id,
+            Project.workspace_id == scope.workspace_id,
+        ).with_for_update()
+    )
+    if not project:
+        raise APIError("RESOURCE_NOT_FOUND", "Project not found", 404)
     e = Episode(workspace_id=scope.workspace_id, project_id=scope.project_id, episode_no=next_no(db, Episode, Episode.episode_no, scope), title=payload.title, synopsis=payload.synopsis)
     db.add(e)
     db.flush()
@@ -115,7 +123,15 @@ def list_episodes(request: Request, scope: ProjectScope = Depends(project_scope)
 @router.post("/episodes/{episode_id}/scenes")
 def create_scene(episode_id: str, payload: SceneCreate, request: Request, scope: ProjectScope = Depends(project_scope), db: Session = Depends(get_db)):
     require(scope, "content.edit")
-    scoped_get(db, Episode, episode_id, scope)
+    episode = db.scalar(
+        select(Episode).where(
+            Episode.id == episode_id,
+            Episode.workspace_id == scope.workspace_id,
+            Episode.project_id == scope.project_id,
+        ).with_for_update()
+    )
+    if not episode:
+        raise APIError("RESOURCE_NOT_FOUND", "Episode not found", 404)
     scene = Scene(workspace_id=scope.workspace_id, project_id=scope.project_id, episode_id=episode_id, scene_no=next_no(db, Scene, Scene.scene_no, scope, Scene.episode_id, episode_id), heading=payload.heading, description=payload.description)
     db.add(scene)
     db.flush()
@@ -151,7 +167,15 @@ def edit_scene(scene_id: str, payload: SceneEdit, request: Request, scope: Proje
 @router.post("/scenes/{scene_id}/shots")
 def create_shot(scene_id: str, payload: ShotCreate, request: Request, scope: ProjectScope = Depends(project_scope), db: Session = Depends(get_db)):
     require(scope, "content.edit")
-    scene = scoped_get(db, Scene, scene_id, scope)
+    scene = db.scalar(
+        select(Scene).where(
+            Scene.id == scene_id,
+            Scene.workspace_id == scope.workspace_id,
+            Scene.project_id == scope.project_id,
+        ).with_for_update()
+    )
+    if not scene:
+        raise APIError("RESOURCE_NOT_FOUND", "Scene not found", 404)
     validate_character_ids(db, scope, payload.character_ids)
     shot = Shot(workspace_id=scope.workspace_id, project_id=scope.project_id, episode_id=scene.episode_id, scene_id=scene_id, shot_no=next_no(db, Shot, Shot.shot_no, scope, Shot.scene_id, scene_id), **payload.model_dump())
     db.add(shot)
