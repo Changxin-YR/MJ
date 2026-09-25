@@ -294,6 +294,7 @@ class KnowledgeVersion(IdMixin, ScopeMixin, Base):
 
 class Timeline(IdMixin, ScopeMixin, Base):
     __tablename__ = "timelines"
+    __table_args__ = (UniqueConstraint("project_id", "episode_id", name="uq_timeline_project_episode"),)
     episode_id: Mapped[str] = mapped_column(String(36), ForeignKey("episodes.id"), nullable=False)
     status: Mapped[str] = mapped_column(String(30), default="DRAFT", nullable=False)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
