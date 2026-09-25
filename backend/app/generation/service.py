@@ -13,6 +13,23 @@ from app.providers.registry import registry
 from app.storyboard.state import transition_job, transition_shot
 
 
+CHINESE_VISUAL_RULE = (
+    "硬性语言约束：画面中如果出现任何可读文字、招牌、标识、字幕或拟声词，"
+    "只能使用简体中文（允许阿拉伯数字和常规标点）；禁止日文假名、韩文、英文单词和乱码。"
+    "如果剧情没有明确要求出现文字，则不要生成任何可读文字。"
+)
+CHINESE_VISUAL_NEGATIVE = "日文文字, 日语假名, 韩文, 韩语谚文, 英文单词, 拉丁字母招牌, 乱码, 伪文字, 错别字字幕"
+
+
+def chinese_visual_prompt(prompt: str) -> str:
+    return f"{prompt.strip()}\n{CHINESE_VISUAL_RULE}" if prompt.strip() else CHINESE_VISUAL_RULE
+
+
+def chinese_visual_negative_prompt(negative_prompt: str) -> str:
+    parts = [negative_prompt.strip(), CHINESE_VISUAL_NEGATIVE]
+    return ", ".join(part for part in parts if part)
+
+
 def reserve(db: Session, project: Project, amount: Decimal) -> None:
     if Decimal(project.budget_used) + Decimal(project.budget_reserved) + amount > Decimal(project.budget_limit):
         raise APIError("BUDGET_EXCEEDED", "Project budget exceeded", 409)
@@ -53,7 +70,8 @@ def request_generation(db: Session, scope: ProjectScope, shot_id: str, kind: str
         model = settings.comfyui_checkpoint
     else:
         model = f"fake-{kind.lower()}-v1"
-    job = GenerationJob(workspace_id=scope.workspace_id, project_id=scope.project_id, provider=entry.provider, model=model, resource_type="shot", resource_id=shot.id, kind=kind, input_json={"prompt": ". ".join(filter(None, [shot.description, shot.action, shot.prompt])), "negative_prompt": shot.negative_prompt, "duration": shot.duration, "dialogue": shot.dialogue, "image_asset_id": shot.current_image_asset_id}, idempotency_key=idempotency_key, estimated_cost=estimate, actual_cost=0, status="CREATED", trace_id=trace_id, agent_run_id=agent_run_id, tool_call_id=tool_call_id)
+    base_prompt = ". ".join(filter(None, [shot.description, shot.action, shot.prompt]))
+    job = GenerationJob(workspace_id=scope.workspace_id, project_id=scope.project_id, provider=entry.provider, model=model, resource_type="shot", resource_id=shot.id, kind=kind, input_json={"prompt": chinese_visual_prompt(base_prompt), "negative_prompt": chinese_visual_negative_prompt(shot.negative_prompt), "duration": shot.duration, "dialogue": shot.dialogue, "image_asset_id": shot.current_image_asset_id}, idempotency_key=idempotency_key, estimated_cost=estimate, actual_cost=0, status="CREATED", trace_id=trace_id, agent_run_id=agent_run_id, tool_call_id=tool_call_id)
     db.add(job)
     db.flush()
     transition_job(job, "QUEUED")
