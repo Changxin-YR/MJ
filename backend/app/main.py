@@ -13,12 +13,14 @@ from app.api.errors import APIError, api_error_handler, ok, validation_error_han
 from app.asset.routes import router as asset_router
 from app.audit.routes import router as audit_router
 from app.auth.routes import router as auth_router
+from app.bible.routes import router as bible_router
 from app.character.routes import router as character_router
 from app.config import settings
 from app.db import engine
 from app.generation.callbacks import router as callback_router
 from app.generation.routes import router as generation_router
 from app.rag.routes import router as rag_router
+from app.relationship.routes import router as relationship_router
 from app.story.routes import router as story_router
 from app.storyboard.routes import router as storyboard_router
 from app.timeline.routes import router as timeline_router
@@ -72,7 +74,9 @@ def ready(request: Request):
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(workspace_router, prefix="/api/v1")
 app.include_router(story_router, prefix="/api/v1")
+app.include_router(bible_router, prefix="/api/v1")
 app.include_router(character_router, prefix="/api/v1")
+app.include_router(relationship_router, prefix="/api/v1")
 app.include_router(storyboard_router, prefix="/api/v1")
 app.include_router(rag_router, prefix="/api/v1")
 app.include_router(generation_router, prefix="/api/v1")
