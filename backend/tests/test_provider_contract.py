@@ -1,12 +1,9 @@
-from datetime import timedelta
-
 import pytest
 
 from app.agent.inspector import CHECKS, _frames
 from app.asset.storage import validate
 from app.config import settings
 from app.generation.service import apply_chinese_image_policy
-from app.models import now
 from app.providers import dashscope
 from app.providers.fake import FakeImageProvider, FakeTTSProvider, FakeVideoProvider
 from app.providers.registry import ProviderRegistry
@@ -28,21 +25,24 @@ def test_fake_media_providers_obey_contract():
     video_provider.cancel(task_id)
 
 
-def test_provider_circuit_falls_back_and_recovers(monkeypatch):
+def test_provider_circuit_falls_back_across_registry_instances(monkeypatch):
     monkeypatch.setattr(settings, "provider_mode", "auto")
     monkeypatch.setattr(settings, "dashscope_api_key", "test-key")
     monkeypatch.setattr(settings, "comfyui_checkpoint", "")
-    registry = ProviderRegistry()
-    assert registry.route("IMAGE").provider == "dashscope"
-    for _ in range(3):
-        registry.failure("dashscope")
-    assert registry.entries["dashscope"].circuit == "OPEN"
-    assert registry.route("IMAGE").provider == "fake"
-    registry.entries["dashscope"].opened_at = now() - timedelta(seconds=31)
-    assert registry.route("IMAGE").provider == "dashscope"
-    assert registry.entries["dashscope"].circuit == "HALF_OPEN"
-    registry.success("dashscope")
-    assert registry.entries["dashscope"].circuit == "CLOSED"
+    worker_registry = ProviderRegistry()
+    api_registry = ProviderRegistry()
+    worker_registry.success("dashscope")
+    try:
+        assert api_registry.route("IMAGE").provider == "dashscope"
+        for _ in range(3):
+            worker_registry.failure("dashscope")
+        assert worker_registry.entries["dashscope"].circuit == "OPEN"
+        assert api_registry.route("IMAGE").provider == "fake"
+        worker_registry._redis().delete(worker_registry._open_key("dashscope"))
+        assert api_registry.route("IMAGE").provider == "dashscope"
+    finally:
+        worker_registry.success("dashscope")
+    assert worker_registry.entries["dashscope"].circuit == "CLOSED"
 
 
 def test_comfyui_mode_routes_images_locally_and_other_media_to_fake(monkeypatch):
