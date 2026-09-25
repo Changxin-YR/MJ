@@ -238,3 +238,32 @@ def test_non_chinese_visible_text_cannot_be_overridden():
         "review_reason": "人工确认后仍想强制通过",
     })
     assert code == 409 and body["error"]["code"] == "LANGUAGE_POLICY_FAILED"
+
+
+
+def test_successful_image_regeneration_invalidates_old_video_but_keeps_voice():
+    client = TestClient(app)
+    _, token = register(client, "image-regeneration")
+    prefix, shot = make_ready_shot(client, token)
+    for kind in ("IMAGE", "VIDEO", "VOICE"):
+        code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": kind, "idempotency_key": str(uuid4())})
+        assert code == 200, body
+        process_generation(body["data"]["id"])
+        code, body = call(client, "GET", f"{prefix}/shots/{shot['id']}", token)
+        assert code == 200, body
+        shot = body["data"]
+
+    old_image = shot["current_image_asset_id"]
+    old_video = shot["current_video_asset_id"]
+    old_audio = shot["current_audio_asset_id"]
+    assert old_image and old_video and old_audio
+
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": "IMAGE", "idempotency_key": str(uuid4())})
+    assert code == 200, body
+    process_generation(body["data"]["id"])
+    code, body = call(client, "GET", f"{prefix}/shots/{shot['id']}", token)
+    assert code == 200, body
+    regenerated = body["data"]
+    assert regenerated["current_image_asset_id"] != old_image
+    assert regenerated["current_video_asset_id"] is None
+    assert regenerated["current_audio_asset_id"] == old_audio
