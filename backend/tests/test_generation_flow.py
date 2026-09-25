@@ -332,3 +332,55 @@ def test_final_approval_requires_current_video():
         "target": "APPROVED",
     })
     assert code == 409 and body["error"]["code"] == "RESOURCE_CONFLICT"
+
+
+
+def test_video_generation_requires_image_inspection_pass():
+    client = TestClient(app)
+    _, token = register(client, "video-image-gate")
+    prefix, shot = make_ready_shot(client, token)
+
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={
+        "kind": "IMAGE",
+        "idempotency_key": str(uuid4()),
+    })
+    assert code == 200, body
+    process_generation(body["data"]["id"])
+    code, body = call(client, "GET", f"{prefix}/shots/{shot['id']}", token)
+    assert code == 200, body
+    shot = body["data"]
+    assert shot["current_image_asset_id"]
+
+    with SessionLocal() as db:
+        row = db.get(Shot, shot["id"])
+        row.inspection_json = {
+            "status": "FAIL",
+            "score": 0.1,
+            "issues": ["Korean text is visible"],
+            "checks": {"visible_text_language": "FAIL"},
+            "method": "QWEN_VL",
+        }
+        db.commit()
+
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={
+        "kind": "VIDEO",
+        "idempotency_key": str(uuid4()),
+    })
+    assert code == 409 and body["error"]["code"] == "INSPECTION_FAILED"
+
+    with SessionLocal() as db:
+        row = db.get(Shot, shot["id"])
+        row.inspection_json = {
+            "status": "PASS",
+            "score": 0.98,
+            "issues": [],
+            "checks": {"visible_text_language": "PASS"},
+            "method": "QWEN_VL",
+        }
+        db.commit()
+
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={
+        "kind": "VIDEO",
+        "idempotency_key": str(uuid4()),
+    })
+    assert code == 200, body
