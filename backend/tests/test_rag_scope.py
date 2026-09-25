@@ -174,3 +174,83 @@ def test_failed_reindex_preserves_previous_qdrant_points(monkeypatch):
         limit=5,
     )
     assert after and any("第三块砖" in item["text"] for item in after)
+
+
+
+def _long_subjectless_dialogue_story() -> str:
+    return """沈青衡和顾七沿着地宫石阶往下走，前面只剩一盏将灭的青灯。
+顾七低声问：“还要继续往里走吗？”
+“走。”
+“前面已经没有地图了。”
+“我知道。”
+“刚才那道门差点把我们困死。”
+“所以这次慢一点。”
+“你听见水声了吗？”
+“听见了，在左边。”
+“可左边是封死的墙。”
+“墙后是空的。”
+“你怎么知道？”
+“风从缝里出来。”
+雨水从他们衣角滴到石阶上。
+“那盏青灯要灭了。”
+“灭了就别回头。”
+“你总这么说。”
+“因为回头更危险。”
+“前面还有第二道门。”
+“看见了。”
+“门上没有锁孔。”
+“锁不在门上。”
+“那在哪？”
+“石像手里。”
+远处传来一声极轻的金属碰撞。
+“你听见了吗？”
+“赤铜铃。”
+“那东西不是早就丢了吗？”
+“没有。”
+“那为什么还要进第二道门？”
+“因为赤铜铃就在第二道门后，它能证明昨晚来过这里的人是谁。”
+“确定？”
+“确定。先别碰那盏灯。”
+两人停在第二道门前，没有立刻伸手。"""
+
+
+def test_long_subjectless_dialogue_keeps_anchor_and_speaker_hints():
+    records = build_chunk_records(_long_subjectless_dialogue_story())
+    dialogue = [record for record in records if record["chunk_kind"] == "dialogue"]
+    assert len(dialogue) >= 2
+    late = [record for record in dialogue if "赤铜铃就在第二道门后" in record["core_text"]]
+    assert late
+    assert any("顾七低声问" in record["text"] for record in late)
+    assert any("顾七" in record.get("speaker_hints", []) for record in late)
+    assert any(record.get("has_subjectless_dialogue") for record in late)
+
+
+def test_long_dialogue_retrieval_expands_adjacent_context_across_chunk_boundary():
+    client = TestClient(app)
+    _, token = register(client, "rag-cn-long-dialogue")
+    _, body = call(client, "POST", "/api/v1/workspaces", token, json={"name": "长对白 RAG"})
+    workspace = body["data"]["id"]
+    _, body = call(client, "POST", f"/api/v1/workspaces/{workspace}/projects", token, json={"name": "长对白项目"})
+    prefix = f"/api/v1/projects/{body['data']['id']}"
+    code, body = call(client, "POST", f"{prefix}/stories", token, json={"title": "地宫连续对白", "content": _long_subjectless_dialogue_story()})
+    assert code == 200, body
+    story_id = body["data"]["id"]
+    code, body = call(client, "POST", f"{prefix}/knowledge/stories/{story_id}/index", token)
+    assert code == 200, body
+
+    code, body = call(
+        client,
+        "POST",
+        f"{prefix}/knowledge/search",
+        token,
+        json={"query": "赤铜铃之后，顾七问为什么还要进第二道门，对方怎么回答？", "limit": 3},
+    )
+    assert code == 200, body
+    assert body["data"], body
+    best = body["data"][0]
+    assert "顾七低声问" in best["text"]
+    assert "为什么还要进第二道门" in best["text"]
+    assert "赤铜铃就在第二道门后" in best["text"]
+    assert best["chunk_kind"] == "dialogue"
+    assert "顾七" in best.get("speaker_hints", [])
+    assert best.get("context_expanded") is True
