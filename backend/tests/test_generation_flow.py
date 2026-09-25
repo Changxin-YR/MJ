@@ -267,3 +267,29 @@ def test_successful_image_regeneration_invalidates_old_video_but_keeps_voice():
     assert regenerated["current_image_asset_id"] != old_image
     assert regenerated["current_video_asset_id"] is None
     assert regenerated["current_audio_asset_id"] == old_audio
+
+
+
+def test_foreign_script_voice_is_rejected_before_budget_reservation():
+    client = TestClient(app)
+    _, token = register(client, "foreign-voice")
+    prefix, shot = make_ready_shot(client, token)
+    code, body = call(client, "PATCH", f"{prefix}/shots/{shot['id']}", token, json={
+        "expected_version": shot["version"],
+        "dialogue": "こんにちは，城市醒来了。",
+    })
+    assert code == 200, body
+    shot = body["data"]
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/transition", token, json={
+        "expected_version": shot["version"],
+        "target": "STORYBOARD_READY",
+    })
+    assert code == 200, body
+    shot = body["data"]
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={
+        "kind": "VOICE",
+        "idempotency_key": str(uuid4()),
+    })
+    assert code == 422 and body["error"]["code"] == "INVALID_PARAMETER"
+    code, body = call(client, "GET", prefix, token)
+    assert code == 200 and body["data"]["budget_reserved"] == 0
