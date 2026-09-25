@@ -167,6 +167,8 @@ def request_generation(db: Session, scope: ProjectScope, shot_id: str, kind: str
         raise APIError("SHOT_LOCKED" if shot.status == "LOCKED" else "RESOURCE_CONFLICT", "Shot cannot generate in current state", 409)
     if kind == "VIDEO" and not shot.current_image_asset_id:
         raise APIError("RESOURCE_CONFLICT", "Generate image first", 409)
+    if kind == "VIDEO" and (shot.inspection_json or {}).get("status") != "PASS":
+        raise APIError("INSPECTION_FAILED", "Current image must pass inspection before video generation", 409)
     if kind == "VOICE" and not shot.dialogue.strip():
         raise APIError("INVALID_PARAMETER", "Dialogue required for voice", 422)
     if kind == "VOICE" and FOREIGN_ASIAN_SCRIPT.search(shot.dialogue):
