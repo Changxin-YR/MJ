@@ -9,13 +9,28 @@ import httpx
 from app.config import settings
 
 
+def lexical_tokens(text: str) -> list[str]:
+    tokens: list[str] = []
+    for part in re.findall(r"[\u4e00-\u9fff]+|[A-Za-z0-9_]+", text.lower()):
+        if re.fullmatch(r"[\u4e00-\u9fff]+", part):
+            if len(part) == 1:
+                tokens.append(part)
+            else:
+                tokens.extend(part[i:i + 2] for i in range(len(part) - 1))
+                if len(part) >= 3:
+                    tokens.extend(part[i:i + 3] for i in range(len(part) - 2))
+        else:
+            tokens.append(part)
+    return tokens
+
+
 class FakeEmbeddingProvider:
-    model = "deterministic-test-v1"
-    dimensions = 64
+    model = "deterministic-test-v2-cn-ngram"
+    dimensions = 128
 
     def embed(self, text: str) -> list[float]:
         values = [0.0] * self.dimensions
-        for token in re.findall(r"[\w\u4e00-\u9fff]+", text.lower()):
+        for token in lexical_tokens(text):
             digest = hashlib.sha256(token.encode()).digest()
             index = int.from_bytes(digest[:2], "big") % self.dimensions
             values[index] += 1 if digest[2] % 2 else -1
