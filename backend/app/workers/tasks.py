@@ -114,6 +114,10 @@ def complete_job(job_id: str, owner: str, result, inspection: dict) -> None:
         db.add(GenerationOutput(workspace_id=job.workspace_id, project_id=job.project_id, job_id=job.id, asset_id=asset.id, kind=job.kind))
         if job.kind == "IMAGE":
             shot.current_image_asset_id = asset.id
+            # A video is derived from the previously selected image. Once a
+            # new image succeeds, that downstream video can no longer be
+            # treated as current or reviewed.
+            shot.current_video_asset_id = None
         elif job.kind == "VIDEO":
             shot.current_video_asset_id = asset.id
         else:
