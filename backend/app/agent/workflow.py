@@ -91,6 +91,7 @@ def plan(state: DirectorState):
                         "score": source.get("score"),
                         "chunk_kind": source.get("chunk_kind", "legacy"),
                         "speaker_hints": source.get("speaker_hints", []),
+                        "speaker_anchors": source.get("speaker_anchors", []),
                         "retrieval_mode": source.get("retrieval_mode", "dense"),
                     }
                     for source in state.get("story_context", [])[:5]
