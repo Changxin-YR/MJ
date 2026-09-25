@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
@@ -12,6 +14,7 @@ from app.db import get_db
 from app.models import Asset
 
 router = APIRouter(prefix="/projects/{project_id}/assets", tags=["assets"])
+logger = logging.getLogger(__name__)
 
 
 class UploadIntent(BaseModel):
@@ -43,7 +46,10 @@ def finalize_upload(asset_id: str, request: Request, scope: ProjectScope = Depen
     quarantine_key = promote_quarantine(asset, asset.size)
     record(db, actor_type="USER", actor_id=scope.user_id, action="asset.upload.finalize", resource_type="asset", resource_id=asset.id, workspace_id=scope.workspace_id, project_id=scope.project_id, trace_id=trace_id(request))
     db.commit()
-    client().remove_object(asset.bucket, quarantine_key)
+    try:
+        client().remove_object(asset.bucket, quarantine_key)
+    except Exception:
+        logger.warning("quarantine cleanup failed after successful finalize", exc_info=True)
     return ok(request, asset_data(asset))
 
 
