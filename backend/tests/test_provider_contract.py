@@ -1,14 +1,18 @@
 from datetime import timedelta
 
+import pytest
+
 from app.asset.storage import validate
 from app.config import settings
+from app.generation.service import apply_chinese_image_policy
 from app.models import now
+from app.providers import dashscope
 from app.providers.fake import FakeImageProvider, FakeTTSProvider, FakeVideoProvider
 from app.providers.registry import ProviderRegistry
 
 
 def test_fake_media_providers_obey_contract():
-    image = FakeImageProvider().generate("Courier on a rooftop")
+    image = FakeImageProvider().generate("中文分镜：快递员站在雨夜屋顶")
     assert validate(image)[:2] == (1280, 720)
     video_provider = FakeVideoProvider()
     task_id = video_provider.submit(image.content, 2, "gentle motion")
@@ -44,3 +48,37 @@ def test_comfyui_mode_routes_images_locally_and_other_media_to_fake(monkeypatch)
     assert registry.route("IMAGE").provider == "comfyui"
     assert registry.route("VIDEO").provider == "fake"
     assert registry.route("VOICE").provider == "fake"
+
+
+def test_image_policy_forces_simplified_chinese_and_preserves_negative_budget():
+    prompt, negative = apply_chinese_image_policy("雨夜街道，店铺招牌清晰可见", "低清晰度，" + "x" * 600)
+    assert "只能使用简体中文" in prompt
+    assert "禁止日文假名" in prompt
+    assert "韩文谚文" in prompt
+    assert "日文" in negative and "韩文" in negative and "繁体中文" in negative
+    assert len(negative) <= 500
+
+
+def test_dashscope_disables_prompt_rewrite_and_forces_chinese_tts(monkeypatch):
+    captured = []
+
+    class CapturedPayload(Exception):
+        pass
+
+    def capture(method, path, *, payload=None, asynchronous=False):
+        captured.append({"method": method, "path": path, "payload": payload, "asynchronous": asynchronous})
+        raise CapturedPayload
+
+    monkeypatch.setattr(dashscope, "_api", capture)
+
+    with pytest.raises(CapturedPayload):
+        dashscope.DashScopeImageProvider().generate("简体中文招牌", "日文，韩文")
+    image_payload = captured[-1]["payload"]
+    assert image_payload["parameters"]["prompt_extend"] is False
+    assert "简体中文招牌" in image_payload["input"]["messages"][0]["content"][0]["text"]
+
+    with pytest.raises(CapturedPayload):
+        dashscope.DashScopeTTSProvider().synthesize("城市醒来了。", 2)
+    tts_payload = captured[-1]["payload"]
+    assert tts_payload["input"]["language_type"] == "Chinese"
+    assert tts_payload["input"]["text"] == "城市醒来了。"
