@@ -12,7 +12,20 @@ from app.providers.embeddings import lexical_tokens, selected_embedding_provider
 
 DIALOGUE_START_RE = re.compile(r'^\s*(?:[“「『"‘]|[\u4e00-\u9fffA-Za-z0-9_·]{1,12}[：:])')
 SENTENCE_SPLIT_RE = re.compile(r'(?<=[。！？!?；;])')
-DIALOGUE_QUERY_CUES = ("说", "问", "回答", "答道", "对白", "对话", "谁说", "这句话", "接着", "随后", "然后呢")
+DIALOGUE_QUERY_CUES = (
+    "说", "问", "回答", "答道", "对白", "对话", "谁说", "这句话", "接着", "随后", "然后呢",
+    "他说", "她说", "回应", "回了", "接话", "上一句", "下一句", "后一句", "前一句",
+)
+SCENE_BOUNDARY_RE = re.compile(r"^(?:第[一二三四五六七八九十百千万\\d]+[章节卷回]|[-—=*#]{3,})")
+SPEAKER_PREFIX_RE = re.compile(
+    r"^\\s*([\\u4e00-\\u9fffA-Za-z0-9_·]{1,12})(?:问道|问|说道|说|答道|回答|答|喊道|喊|"
+    r"低声道|轻声道|沉声道|冷声道|笑道|开口道|开口|反问|继续道|淡淡道)"
+)
+SPEAKER_COLON_RE = re.compile(r"^\\s*([\\u4e00-\\u9fffA-Za-z0-9_·]{1,12})[：:]")
+SPEAKER_SUFFIX_RE = re.compile(
+    r"[”」』\"]\\s*([\\u4e00-\\u9fffA-Za-z0-9_·]{1,12})(?:问道|问|说道|说|答道|答|喊道|喊|道)"
+)
+SPEAKER_STOP = {"他", "她", "它", "他们", "她们", "对方", "那人", "此人", "少年", "少女", "男人", "女人", "老人"}
 
 
 def collection_name(provider) -> str:
@@ -27,7 +40,10 @@ def client() -> QdrantClient:
 def ensure_collection(q: QdrantClient, name: str, dimensions: int) -> None:
     if not q.collection_exists(name):
         q.create_collection(name, vectors_config=models.VectorParams(size=dimensions, distance=models.Distance.COSINE))
-    keyword_fields = ("workspace_id", "project_id", "document_id", "version_id", "source_type", "source_id", "status", "chunk_kind")
+    keyword_fields = (
+        "workspace_id", "project_id", "document_id", "version_id", "source_type", "source_id",
+        "status", "chunk_kind", "lexical_tokens", "speaker_hints",
+    )
     for field in keyword_fields:
         try:
             q.create_payload_index(name, field, models.PayloadSchemaType.KEYWORD, wait=True)
