@@ -8,6 +8,7 @@ from app.db import SessionLocal
 from app.main import app
 from app.models import GenerationJob, OutboxEvent, Shot
 from app.providers.registry import registry
+from app.workers import tasks as worker_tasks
 from app.workers.dispatcher import dispatch_batch
 from app.workers.tasks import claim_job, fail_job, process_generation
 
@@ -384,3 +385,41 @@ def test_video_generation_requires_image_inspection_pass():
         "idempotency_key": str(uuid4()),
     })
     assert code == 200, body
+
+
+
+def test_failed_voice_language_inspection_is_not_promoted_to_current_audio(monkeypatch):
+    client = TestClient(app)
+    _, token = register(client, "voice-language-gate")
+    prefix, shot = make_ready_shot(client, token)
+
+    monkeypatch.setattr(
+        worker_tasks,
+        "inspect_media",
+        lambda *_args, **_kwargs: {
+            "status": "FAIL",
+            "score": 0.0,
+            "issues": ["Voice language is ja, expected zh"],
+            "checks": {"dialogue": "FAIL", "voice_language": "FAIL"},
+            "method": "QWEN_ASR",
+            "language": "ja",
+            "transcript": "こんにちは",
+        },
+    )
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={
+        "kind": "VOICE",
+        "idempotency_key": str(uuid4()),
+    })
+    assert code == 200, body
+    job_id = body["data"]["id"]
+    process_generation(job_id)
+
+    code, body = call(client, "GET", f"{prefix}/shots/{shot['id']}", token)
+    assert code == 200, body
+    assert body["data"]["current_audio_asset_id"] is None
+
+    code, body = call(client, "GET", f"{prefix}/generation-jobs/{job_id}", token)
+    assert code == 200, body
+    assert body["data"]["status"] == "SUCCEEDED"
+    assert body["data"]["inspection"]["status"] == "FAIL"
+    assert body["data"]["inspection"]["checks"]["voice_language"] == "FAIL"
