@@ -26,6 +26,8 @@ from app.providers.registry import registry
 from app.storyboard.state import transition_job, transition_shot
 from app.workers.celery_app import celery_app
 
+JOB_LEASE = timedelta(minutes=10)
+
 
 def claim_job(job_id: str) -> str | None:
     owner = str(uuid4())
@@ -42,7 +44,7 @@ def claim_job(job_id: str) -> str | None:
         if job.status == "QUEUED":
             transition_job(job, "RUNNING")
         job.lease_owner = owner
-        job.lease_expires_at = now() + timedelta(minutes=5)
+        job.lease_expires_at = now() + JOB_LEASE
         job.last_heartbeat_at = now()
         job.started_at = job.started_at or now()
         db.commit()
