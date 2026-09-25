@@ -8,7 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ok, trace_id
-from app.asset.storage import MAX_SIZE, client, create_quarantine_asset, promote_quarantine, store_result
+from app.asset.storage import (
+    MAX_SIZE,
+    client,
+    create_quarantine_asset,
+    promote_quarantine,
+    store_result,
+)
 from app.audit.service import record
 from app.auth.dependencies import ProjectScope, project_scope, require, scoped_get
 from app.db import get_db
