@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.api.errors import APIError
 from app.auth.dependencies import ProjectScope, require
 from app.config import settings
-from app.models import GenerationJob, OutboxEvent, Project, Shot
+from app.models import Character, CharacterVersion, GenerationJob, OutboxEvent, Project, Shot
 from app.providers.registry import registry
 from app.storyboard.state import transition_job, transition_shot
 
@@ -35,6 +35,54 @@ def apply_chinese_image_policy(prompt: str, negative_prompt: str) -> tuple[str, 
         else IMAGE_NON_CHINESE_TEXT_NEGATIVE
     )
     return constrained_prompt, constrained_negative
+
+
+def build_generation_prompt(db: Session, scope: ProjectScope, shot: Shot) -> tuple[str, str]:
+    anchors: list[str] = []
+    negatives: list[str] = []
+    for character_id in shot.character_ids:
+        character = db.scalar(
+            select(Character).where(
+                Character.id == character_id,
+                Character.workspace_id == scope.workspace_id,
+                Character.project_id == scope.project_id,
+            )
+        )
+        if not character:
+            raise APIError("RESOURCE_NOT_FOUND", "Character not found", 404)
+        if not character.active_version_id:
+            continue
+        version = db.scalar(
+            select(CharacterVersion).where(
+                CharacterVersion.id == character.active_version_id,
+                CharacterVersion.character_id == character.id,
+                CharacterVersion.workspace_id == scope.workspace_id,
+                CharacterVersion.project_id == scope.project_id,
+                CharacterVersion.status == "ACTIVE",
+            )
+        )
+        if not version:
+            raise APIError("RESOURCE_CONFLICT", "Active character version is unavailable", 409)
+        dna = version.dna or {}
+        anchors.append(
+            "; ".join(
+                filter(
+                    None,
+                    [
+                        f"{character.name}: {dna.get('prompt_anchor', '')}".strip(),
+                        f"face {dna.get('face', '')}".strip() if dna.get("face") else "",
+                        f"hair {dna.get('hair', '')}".strip() if dna.get("hair") else "",
+                        f"costume {dna.get('costume', '')}".strip() if dna.get("costume") else "",
+                        f"style {dna.get('style', '')}".strip() if dna.get("style") else "",
+                    ],
+                )
+            )
+        )
+        if dna.get("negative_prompt"):
+            negatives.append(str(dna["negative_prompt"]).strip())
+    prompt = ". ".join(filter(None, [shot.description, shot.action, shot.prompt, *anchors]))
+    negative_prompt = ", ".join(filter(None, [shot.negative_prompt, *negatives]))
+    return prompt, negative_prompt
 
 
 def reserve(db: Session, project: Project, amount: Decimal) -> None:
@@ -77,9 +125,8 @@ def request_generation(db: Session, scope: ProjectScope, shot_id: str, kind: str
         model = settings.comfyui_checkpoint
     else:
         model = f"fake-{kind.lower()}-v1"
-    prompt = ". ".join(filter(None, [shot.description, shot.action, shot.prompt]))
-    negative_prompt = shot.negative_prompt
-    if kind == "IMAGE":
+    prompt, negative_prompt = build_generation_prompt(db, scope, shot)
+    if kind in {"IMAGE", "VIDEO"}:
         prompt, negative_prompt = apply_chinese_image_policy(prompt, negative_prompt)
     job = GenerationJob(workspace_id=scope.workspace_id, project_id=scope.project_id, provider=entry.provider, model=model, resource_type="shot", resource_id=shot.id, kind=kind, input_json={"prompt": prompt, "negative_prompt": negative_prompt, "duration": shot.duration, "dialogue": shot.dialogue, "image_asset_id": shot.current_image_asset_id}, idempotency_key=idempotency_key, estimated_cost=estimate, actual_cost=0, status="CREATED", trace_id=trace_id, agent_run_id=agent_run_id, tool_call_id=tool_call_id)
     db.add(job)
