@@ -4,6 +4,7 @@ import pytest
 
 from app.agent import inspector
 from app.agent.inspector import CHECKS, _frames
+from app.api.errors import APIError
 from app.asset.storage import validate
 from app.config import settings
 from app.generation.service import apply_chinese_image_policy
@@ -41,7 +42,9 @@ def test_provider_circuit_falls_back_across_registry_instances(monkeypatch):
         for _ in range(3):
             worker_registry.failure("dashscope")
         assert worker_registry.entries["dashscope"].circuit == "OPEN"
-        assert api_registry.route("IMAGE").provider == "fake"
+        with pytest.raises(APIError) as error:
+            api_registry.route("IMAGE")
+        assert error.value.code == "GENERATION_FAILED"
         worker_registry._redis().delete(worker_registry._open_key("dashscope"))
         assert api_registry.route("IMAGE").provider == "dashscope"
     finally:
