@@ -316,16 +316,14 @@ def retrieve(*, workspace_id: str, project_id: str, query: str, limit: int = 5) 
     query_compact = re.sub(r"\s+", "", query)
 
     ranked: list[dict] = []
-    seen: set[tuple[str, str]] = set()
     for point in result.points:
         payload = point.payload or {}
         context_text = str(payload.get("text") or payload.get("core_text") or "")
         core_text = str(payload.get("core_text") or context_text)
         source_id = str(payload.get("source_id") or "")
         key = (source_id, core_text)
-        if not context_text or key in seen:
+        if not context_text:
             continue
-        seen.add(key)
         lexical = _lexical_overlap(query, context_text)
         exact_boost = 0.12 if len(query_compact) >= 2 and query_compact in re.sub(r"\s+", "", context_text) else 0.0
         dialogue_boost = 0.06 if dialogue_query and payload.get("chunk_kind") == "dialogue" else 0.0
@@ -341,7 +339,18 @@ def retrieve(*, workspace_id: str, project_id: str, query: str, limit: int = 5) 
                 "vector_score": float(point.score),
                 "chunk_kind": payload.get("chunk_kind", "legacy"),
                 "chunk_index": payload.get("chunk_index"),
+                "_dedupe_key": key,
             }
         )
     ranked.sort(key=lambda item: item["score"], reverse=True)
-    return ranked[: min(limit, 20)]
+    selected: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for item in ranked:
+        key = item.pop("_dedupe_key")
+        if key in seen:
+            continue
+        seen.add(key)
+        selected.append(item)
+        if len(selected) >= min(limit, 20):
+            break
+    return selected
