@@ -131,6 +131,11 @@ def test_generation_job_uses_active_character_dna_in_real_prompt():
     client = TestClient(app)
     _, token = register(client, "character-prompt")
     prefix, shot = make_ready_shot(client, token)
+    code, body = call(client, "PATCH", prefix + "/settings", token, json={
+        "expected_version": 1,
+        "settings": {"style": "水墨电影感国漫"},
+    })
+    assert code == 200, body
     code, body = call(client, "POST", prefix + "/characters", token, json={
         "name": "林舟",
         "background": "城市信使",
@@ -158,6 +163,7 @@ def test_generation_job_uses_active_character_dna_in_real_prompt():
         job = db.get(GenerationJob, body["data"]["id"])
         assert "林舟始终穿深蓝风衣，短黑发" in job.input_json["prompt"]
         assert "深蓝风衣" in job.input_json["prompt"]
+        assert "项目统一视觉风格：水墨电影感国漫" in job.input_json["prompt"]
         assert "金色长发，日式校服" in job.input_json["negative_prompt"]
 
 
