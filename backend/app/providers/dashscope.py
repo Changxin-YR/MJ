@@ -90,7 +90,7 @@ class DashScopeVideoProvider:
         body = _api("POST", "services/aigc/video-generation/video-synthesis", asynchronous=True, payload={
             "model": settings.dashscope_video_model,
             "input": {"prompt": prompt, "img_url": f"data:image/png;base64,{encoded}"},
-            "parameters": {"resolution": "720P", "duration": max(2, min(15, round(duration))), "prompt_extend": True, "shot_type": "single", "audio": False},
+            "parameters": {"resolution": "720P", "duration": max(2, min(15, round(duration))), "prompt_extend": False, "shot_type": "single", "audio": False},
         })
         return body["output"]["task_id"]
 

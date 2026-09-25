@@ -5,7 +5,7 @@ import { api } from '../../api'
 import type { Asset, Project } from '../../types'
 const props = defineProps<{ project: Project; eventRevision: number }>()
 const assets = ref<Asset[]>([]); const urls = ref<Record<string,string>>({}); const error = ref('')
-async function load() { try { assets.value = await api.get(`/projects/${props.project.id}/assets`); for (const asset of assets.value) if (!urls.value[asset.id]) urls.value[asset.id] = await api.blob(`/projects/${props.project.id}/assets/${asset.id}/content`) } catch (cause) { error.value = (cause as Error).message } }
+async function load() { try { assets.value = await api.get(`/projects/${props.project.id}/assets`); for (const asset of assets.value) if (asset.status === 'READY' && !urls.value[asset.id]) urls.value[asset.id] = await api.blob(`/projects/${props.project.id}/assets/${asset.id}/content`) } catch (cause) { error.value = (cause as Error).message } }
 watch(() => props.eventRevision, load); onMounted(load); onBeforeUnmount(() => Object.values(urls.value).forEach(URL.revokeObjectURL))
 </script>
 <template>

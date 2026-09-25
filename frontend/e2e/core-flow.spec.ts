@@ -46,6 +46,7 @@ test('story to reviewed media and rendered timeline', async ({ page }) => {
 
   await page.locator('.sidebar').getByRole('link', { name: '分镜工作室' }).click()
   await page.getByRole('button', { name: '创建镜头' }).click()
+  await page.getByLabel('出镜角色').selectOption({ label: 'Courier' })
   await page.getByLabel('画面描述').fill('A lone courier stands on a rainy rooftop at dawn')
   await page.getByLabel('对白').fill('城市醒来了。')
   await page.getByLabel('时长（秒）').fill('2')
@@ -63,6 +64,8 @@ test('story to reviewed media and rendered timeline', async ({ page }) => {
   await expect(page.getByText('待处理镜头')).toBeVisible()
   await page.getByRole('button', { name: /Shot 01/ }).click()
   await expect(page.getByText('Inspector')).toBeVisible()
+  await expect(page.locator('aside video')).toBeVisible()
+  await expect(page.locator('aside audio')).toBeVisible()
   await page.getByRole('button', { name: '通过' }).click()
   await page.locator('.sidebar').getByRole('link', { name: '时间线' }).click()
   await page.getByRole('button', { name: '创建时间线' }).click()

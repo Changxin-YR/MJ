@@ -77,7 +77,22 @@ def plan(state: DirectorState):
                 "request": state["request"][:1000],
                 "project": state["project_context"]["project"]["name"],
                 "shot_count": state["project_context"]["shot_count"],
-                "retrieved_sources": [source["text"][:700] for source in state.get("story_context", [])[:5]],
+                "characters": [
+                    {
+                        "name": character["name"],
+                        "background": character.get("background", "")[:500],
+                        "dna": character.get("dna", {}),
+                    }
+                    for character in state["project_context"].get("characters", [])[:30]
+                ],
+                "retrieved_sources": [
+                    {
+                        "text": source["text"][:1200],
+                        "score": source.get("score"),
+                        "chunk_kind": source.get("chunk_kind", "legacy"),
+                    }
+                    for source in state.get("story_context", [])[:5]
+                ],
             }
             summary = DashScopeLLMProvider().complete(json.dumps(package, ensure_ascii=False))
         elif settings.director_llm_mode == "fake":

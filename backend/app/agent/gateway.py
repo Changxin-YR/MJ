@@ -13,6 +13,7 @@ from app.generation.service import job_data, request_generation
 from app.models import (
     AgentRun,
     Character,
+    CharacterVersion,
     Episode,
     GenerationJob,
     PendingAction,
@@ -122,7 +123,34 @@ class ToolGateway:
             db.flush()
             if tool_name == "load_project_context":
                 project = db.scalar(select(Project).where(Project.id == scope.project_id, Project.workspace_id == scope.workspace_id))
-                result = {"project": {"id": project.id, "name": project.name, "description": project.description}, "characters": [{"id": c.id, "name": c.name, "active_version_id": c.active_version_id} for c in db.scalars(select(Character).where(Character.workspace_id == scope.workspace_id, Character.project_id == scope.project_id)).all()], "episodes": [{"id": e.id, "title": e.title} for e in db.scalars(select(Episode).where(Episode.workspace_id == scope.workspace_id, Episode.project_id == scope.project_id)).all()], "shot_count": db.scalar(select(func.count()).select_from(Shot).where(Shot.workspace_id == scope.workspace_id, Shot.project_id == scope.project_id))}
+                characters = db.scalars(select(Character).where(Character.workspace_id == scope.workspace_id, Character.project_id == scope.project_id)).all()
+                active_ids = [character.active_version_id for character in characters if character.active_version_id]
+                active_versions = {
+                    version.id: version
+                    for version in db.scalars(
+                        select(CharacterVersion).where(
+                            CharacterVersion.workspace_id == scope.workspace_id,
+                            CharacterVersion.project_id == scope.project_id,
+                            CharacterVersion.id.in_(active_ids),
+                            CharacterVersion.status == "ACTIVE",
+                        )
+                    ).all()
+                } if active_ids else {}
+                result = {
+                    "project": {"id": project.id, "name": project.name, "description": project.description, "settings": project.settings_json},
+                    "characters": [
+                        {
+                            "id": character.id,
+                            "name": character.name,
+                            "active_version_id": character.active_version_id,
+                            "background": active_versions[character.active_version_id].background if character.active_version_id in active_versions else "",
+                            "dna": active_versions[character.active_version_id].dna if character.active_version_id in active_versions else {},
+                        }
+                        for character in characters
+                    ],
+                    "episodes": [{"id": e.id, "title": e.title} for e in db.scalars(select(Episode).where(Episode.workspace_id == scope.workspace_id, Episode.project_id == scope.project_id)).all()],
+                    "shot_count": db.scalar(select(func.count()).select_from(Shot).where(Shot.workspace_id == scope.workspace_id, Shot.project_id == scope.project_id)),
+                }
             elif tool_name == "retrieve_semantic_context":
                 result = retrieve(workspace_id=scope.workspace_id, project_id=scope.project_id, query=arguments["query"])
             elif tool_name == "load_generation_job":

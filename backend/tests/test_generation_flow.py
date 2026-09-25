@@ -106,9 +106,13 @@ def test_voice_check_preserves_visual_failure_and_review_requires_reason():
     client = TestClient(app)
     _, token = register(client, "visual-review")
     prefix, shot = make_ready_shot(client, token)
-    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": "IMAGE", "idempotency_key": str(uuid4())})
-    assert code == 200, body
-    process_generation(body["data"]["id"])
+    for kind in ("IMAGE", "VIDEO"):
+        code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": kind, "idempotency_key": str(uuid4())})
+        assert code == 200, body
+        process_generation(body["data"]["id"])
+        code, body = call(client, "GET", f"{prefix}/shots/{shot['id']}", token)
+        assert code == 200, body
+        shot = body["data"]
     with SessionLocal() as db:
         row = db.get(Shot, shot["id"])
         row.inspection_json = {"status": "FAIL", "score": 0.2, "issues": ["Two characters"], "checks": {"character_count": "FAIL"}, "method": "QWEN_VL"}
@@ -124,3 +128,207 @@ def test_voice_check_preserves_visual_failure_and_review_requires_reason():
     code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/transition", token, json={"expected_version": shot["version"], "target": "APPROVED", "review_reason": "I inspected the full video and confirmed one character."})
     assert code == 200 and body["data"]["status"] == "APPROVED"
     assert body["data"]["inspection_json"]["review_override"]["reason"] == "I inspected the full video and confirmed one character."
+
+
+
+def test_generation_job_uses_active_character_dna_in_real_prompt():
+    client = TestClient(app)
+    _, token = register(client, "character-prompt")
+    prefix, shot = make_ready_shot(client, token)
+    code, body = call(client, "PATCH", prefix + "/settings", token, json={
+        "expected_version": 1,
+        "settings": {"style": "水墨电影感国漫"},
+    })
+    assert code == 200, body
+    code, body = call(client, "POST", prefix + "/characters", token, json={
+        "name": "林舟",
+        "background": "城市信使",
+        "dna": {
+            "face": "清晰的东方青年面孔",
+            "hair": "短黑发",
+            "costume": "深蓝风衣",
+            "style": "电影感国漫",
+            "prompt_anchor": "林舟始终穿深蓝风衣，短黑发",
+            "negative_prompt": "金色长发，日式校服",
+        },
+    })
+    assert code == 200, body
+    character = body["data"]
+    version_id = character["versions"][0]["id"]
+    code, body = call(client, "POST", f"{prefix}/characters/{character['id']}/versions/{version_id}/activate", token, json={"expected_version": character["version"]})
+    assert code == 200, body
+
+    code, body = call(client, "PATCH", f"{prefix}/shots/{shot['id']}", token, json={
+        "expected_version": shot["version"],
+        "character_ids": [character["id"]],
+        "camera_angle": "low-angle",
+        "camera_movement": "slow push-in",
+        "emotion": "克制紧张",
+    })
+    assert code == 200, body
+    shot = body["data"]
+    assert shot["status"] == "PLANNED"
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/transition", token, json={"expected_version": shot["version"], "target": "STORYBOARD_READY"})
+    assert code == 200, body
+    shot = body["data"]
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": "IMAGE", "idempotency_key": str(uuid4())})
+    assert code == 200, body
+    with SessionLocal() as db:
+        job = db.get(GenerationJob, body["data"]["id"])
+        assert "林舟始终穿深蓝风衣，短黑发" in job.input_json["prompt"]
+        assert "深蓝风衣" in job.input_json["prompt"]
+        assert "项目统一视觉风格：水墨电影感国漫" in job.input_json["prompt"]
+        assert "EXT. ROOFTOP" in job.input_json["prompt"]
+        assert "机位：low-angle" in job.input_json["prompt"]
+        assert "镜头运动：slow push-in" in job.input_json["prompt"]
+        assert "情绪：克制紧张" in job.input_json["prompt"]
+        assert "金色长发，日式校服" in job.input_json["negative_prompt"]
+
+
+def test_editing_approved_shot_invalidates_derived_media_and_review():
+    client = TestClient(app)
+    _, token = register(client, "stale-media")
+    prefix, shot = make_ready_shot(client, token)
+    for kind in ("IMAGE", "VIDEO", "VOICE"):
+        code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": kind, "idempotency_key": str(uuid4())})
+        assert code == 200, body
+        process_generation(body["data"]["id"])
+        code, body = call(client, "GET", f"{prefix}/shots/{shot['id']}", token)
+        assert code == 200, body
+        shot = body["data"]
+
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/transition", token, json={"expected_version": shot["version"], "target": "APPROVED"})
+    assert code == 200, body
+    approved = body["data"]
+    assert approved["current_image_asset_id"] and approved["current_video_asset_id"] and approved["current_audio_asset_id"]
+
+    code, body = call(client, "PATCH", f"{prefix}/shots/{shot['id']}", token, json={
+        "expected_version": approved["version"],
+        "description": "完全不同的新画面",
+        "dialogue": "这是修改后的全新对白。",
+    })
+    assert code == 200, body
+    edited = body["data"]
+    assert edited["status"] == "PLANNED"
+    assert edited["current_image_asset_id"] is None
+    assert edited["current_video_asset_id"] is None
+    assert edited["current_audio_asset_id"] is None
+    assert edited["inspection_json"] is None
+
+
+def test_shot_cannot_be_edited_while_generation_is_running():
+    client = TestClient(app)
+    _, token = register(client, "edit-during-generation")
+    prefix, shot = make_ready_shot(client, token)
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": "IMAGE", "idempotency_key": str(uuid4())})
+    assert code == 200, body
+    code, body = call(client, "GET", f"{prefix}/shots/{shot['id']}", token)
+    assert code == 200 and body["data"]["status"] == "GENERATING"
+    generating = body["data"]
+    code, body = call(client, "PATCH", f"{prefix}/shots/{shot['id']}", token, json={"expected_version": generating["version"], "description": "不应在生成中被修改"})
+    assert code == 409 and body["error"]["code"] == "RESOURCE_CONFLICT"
+
+
+
+def test_non_chinese_visible_text_cannot_be_overridden():
+    client = TestClient(app)
+    _, token = register(client, "language-policy")
+    prefix, shot = make_ready_shot(client, token)
+    with SessionLocal() as db:
+        row = db.get(Shot, shot["id"])
+        row.status = "REVIEW_REQUIRED"
+        row.inspection_json = {
+            "status": "FAIL",
+            "score": 0.1,
+            "issues": ["Korean text is visible on a sign"],
+            "checks": {"visible_text_language": "FAIL"},
+            "method": "QWEN_VL",
+        }
+        db.commit()
+        version = row.version
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/transition", token, json={
+        "expected_version": version,
+        "target": "APPROVED",
+        "review_reason": "人工确认后仍想强制通过",
+    })
+    assert code == 409 and body["error"]["code"] == "LANGUAGE_POLICY_FAILED"
+
+
+
+def test_successful_image_regeneration_invalidates_old_video_but_keeps_voice():
+    client = TestClient(app)
+    _, token = register(client, "image-regeneration")
+    prefix, shot = make_ready_shot(client, token)
+    for kind in ("IMAGE", "VIDEO", "VOICE"):
+        code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": kind, "idempotency_key": str(uuid4())})
+        assert code == 200, body
+        process_generation(body["data"]["id"])
+        code, body = call(client, "GET", f"{prefix}/shots/{shot['id']}", token)
+        assert code == 200, body
+        shot = body["data"]
+
+    old_image = shot["current_image_asset_id"]
+    old_video = shot["current_video_asset_id"]
+    old_audio = shot["current_audio_asset_id"]
+    assert old_image and old_video and old_audio
+
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": "IMAGE", "idempotency_key": str(uuid4())})
+    assert code == 200, body
+    process_generation(body["data"]["id"])
+    code, body = call(client, "GET", f"{prefix}/shots/{shot['id']}", token)
+    assert code == 200, body
+    regenerated = body["data"]
+    assert regenerated["current_image_asset_id"] != old_image
+    assert regenerated["current_video_asset_id"] is None
+    assert regenerated["current_audio_asset_id"] == old_audio
+
+
+
+def test_foreign_script_voice_is_rejected_before_budget_reservation():
+    client = TestClient(app)
+    _, token = register(client, "foreign-voice")
+    prefix, shot = make_ready_shot(client, token)
+    code, body = call(client, "PATCH", f"{prefix}/shots/{shot['id']}", token, json={
+        "expected_version": shot["version"],
+        "dialogue": "こんにちは，城市醒来了。",
+    })
+    assert code == 200, body
+    shot = body["data"]
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/transition", token, json={
+        "expected_version": shot["version"],
+        "target": "STORYBOARD_READY",
+    })
+    assert code == 200, body
+    shot = body["data"]
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={
+        "kind": "VOICE",
+        "idempotency_key": str(uuid4()),
+    })
+    assert code == 422 and body["error"]["code"] == "INVALID_PARAMETER"
+    code, body = call(client, "GET", prefix, token)
+    assert code == 200 and body["data"]["budget_reserved"] == 0
+
+
+
+def test_final_approval_requires_current_video():
+    client = TestClient(app)
+    _, token = register(client, "approval-needs-video")
+    prefix, shot = make_ready_shot(client, token)
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={
+        "kind": "IMAGE",
+        "idempotency_key": str(uuid4()),
+    })
+    assert code == 200, body
+    process_generation(body["data"]["id"])
+    code, body = call(client, "GET", f"{prefix}/shots/{shot['id']}", token)
+    assert code == 200, body
+    image_only = body["data"]
+    assert image_only["status"] == "REVIEW_REQUIRED"
+    assert image_only["current_image_asset_id"]
+    assert image_only["current_video_asset_id"] is None
+
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/transition", token, json={
+        "expected_version": image_only["version"],
+        "target": "APPROVED",
+    })
+    assert code == 409 and body["error"]["code"] == "RESOURCE_CONFLICT"

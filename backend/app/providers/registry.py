@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+import redis
+
 from app.api.errors import APIError
 from app.config import settings
 from app.models import now
@@ -27,6 +29,9 @@ class ProviderEntry:
 
 
 class ProviderRegistry:
+    CIRCUIT_TTL_SECONDS = 30
+    FAILURE_WINDOW_SECONDS = 120
+
     def __init__(self):
         real_enabled = bool(settings.dashscope_api_key) and settings.provider_mode in {"dashscope", "auto"}
         fake_enabled = settings.provider_mode in {"fake", "auto", "comfyui"}
@@ -45,10 +50,33 @@ class ProviderRegistry:
     def adapter(self, provider: str, kind: str):
         return self.adapters[provider][kind]
 
+    def _redis(self):
+        return redis.Redis.from_url(settings.redis_url, decode_responses=True)
+
+    def _failure_key(self, provider: str) -> str:
+        return f"frameforge:provider:{provider}:failures"
+
+    def _open_key(self, provider: str) -> str:
+        return f"frameforge:provider:{provider}:open"
+
+    def _shared_is_open(self, provider: str) -> bool | None:
+        try:
+            return bool(self._redis().exists(self._open_key(provider)))
+        except redis.RedisError:
+            return None
+
     def route(self, kind: str) -> ProviderEntry:
         candidates = sorted((e for e in self.entries.values() if e.enabled and kind in e.capabilities), key=lambda e: (e.priority, e.provider))
         for entry in candidates:
-            if entry.circuit == "OPEN" and entry.opened_at and now() - entry.opened_at > timedelta(seconds=30):
+            shared_open = self._shared_is_open(entry.provider)
+            if shared_open is True:
+                entry.circuit = "OPEN"
+                entry.health = "UNHEALTHY"
+                continue
+            if shared_open is False and entry.circuit == "OPEN":
+                entry.circuit = "HALF_OPEN"
+                entry.health = "DEGRADED"
+            elif shared_open is None and entry.circuit == "OPEN" and entry.opened_at and now() - entry.opened_at > timedelta(seconds=self.CIRCUIT_TTL_SECONDS):
                 entry.circuit = "HALF_OPEN"
             if entry.circuit != "OPEN":
                 return entry
@@ -59,6 +87,11 @@ class ProviderRegistry:
         entry.failures = 0
         entry.circuit = "CLOSED"
         entry.health = "HEALTHY"
+        entry.opened_at = None
+        try:
+            self._redis().delete(self._failure_key(provider), self._open_key(provider))
+        except redis.RedisError:
+            pass
 
     def failure(self, provider: str):
         entry = self.entries[provider]
@@ -67,6 +100,15 @@ class ProviderRegistry:
             entry.circuit = "OPEN"
             entry.opened_at = now()
             entry.health = "UNHEALTHY"
+        try:
+            client = self._redis()
+            failure_key = self._failure_key(provider)
+            failures = int(client.incr(failure_key))
+            client.expire(failure_key, self.FAILURE_WINDOW_SECONDS)
+            if failures >= 3:
+                client.set(self._open_key(provider), now().isoformat(), ex=self.CIRCUIT_TTL_SECONDS)
+        except redis.RedisError:
+            pass
 
 
 registry = ProviderRegistry()

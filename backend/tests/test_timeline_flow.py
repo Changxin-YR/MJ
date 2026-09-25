@@ -19,6 +19,10 @@ def test_render_approved_timeline_to_playable_mp4():
     code, body = call(client, "PATCH", f"{prefix}/shots/{shot['id']}", token, json={"expected_version": shot["version"], "dialogue": f"The city is waking up;$(touch {sentinel})"})
     assert code == 200, body
     shot = body["data"]
+    assert shot["status"] == "PLANNED"
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/transition", token, json={"expected_version": shot["version"], "target": "STORYBOARD_READY"})
+    assert code == 200, body
+    shot = body["data"]
     for kind in ("IMAGE", "VIDEO", "VOICE"):
         code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": kind, "idempotency_key": str(uuid4())})
         assert code == 200, body
@@ -36,6 +40,38 @@ def test_render_approved_timeline_to_playable_mp4():
     assert code == 200, body
     timeline = body["data"]
     assert len(timeline["items"]) == 3
+    code, body = call(client, "POST", f"{prefix}/timelines/{timeline['id']}/audio-items", token, json={
+        "expected_version": timeline["version"],
+        "kind": "MUSIC",
+        "asset_id": shot["current_audio_asset_id"],
+        "start_seconds": 0.1,
+    })
+    assert code == 200, body
+    timeline = body["data"]
+    assert len(timeline["items"]) == 4
+    music_track = next(track for track in timeline["tracks"] if track["kind"] == "MUSIC")
+    assert any(item["track_id"] == music_track["id"] for item in timeline["items"])
+    code, body = call(client, "POST", f"{prefix}/timelines/{timeline['id']}/sync", token, json={"expected_version": timeline["version"]})
+    assert code == 200, body
+    timeline = body["data"]
+    assert len(timeline["items"]) == 4
+    assert any(item["track_id"] == music_track["id"] for item in timeline["items"])
+    with SessionLocal() as db:
+        current = db.get(Shot, shot["id"])
+        current.inspection_json = {
+            "status": "FAIL",
+            "issues": ["Japanese text appeared later in the video"],
+            "checks": {"visible_text_language": "FAIL"},
+            "review_override": {
+                "actor_id": "legacy-reviewer",
+                "reason": "legacy override must no longer bypass language policy",
+                "video_asset_id": current.current_video_asset_id,
+                "reviewed_at": "2026-09-25T00:00:00",
+            },
+        }
+        db.commit()
+    code, body = call(client, "POST", f"{prefix}/timelines/{timeline['id']}/render", token, json={"expected_version": timeline["version"]})
+    assert code == 409 and body["error"]["code"] == "RESOURCE_CONFLICT"
     with SessionLocal() as db:
         current = db.get(Shot, shot["id"])
         current.inspection_json = {"status": "FAIL", "issues": ["Recheck found a mismatch"]}

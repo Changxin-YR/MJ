@@ -26,6 +26,8 @@ from app.providers.registry import registry
 from app.storyboard.state import transition_job, transition_shot
 from app.workers.celery_app import celery_app
 
+JOB_LEASE = timedelta(minutes=10)
+
 
 def claim_job(job_id: str) -> str | None:
     owner = str(uuid4())
@@ -42,7 +44,7 @@ def claim_job(job_id: str) -> str | None:
         if job.status == "QUEUED":
             transition_job(job, "RUNNING")
         job.lease_owner = owner
-        job.lease_expires_at = now() + timedelta(minutes=5)
+        job.lease_expires_at = now() + JOB_LEASE
         job.last_heartbeat_at = now()
         job.started_at = job.started_at or now()
         db.commit()
@@ -114,6 +116,10 @@ def complete_job(job_id: str, owner: str, result, inspection: dict) -> None:
         db.add(GenerationOutput(workspace_id=job.workspace_id, project_id=job.project_id, job_id=job.id, asset_id=asset.id, kind=job.kind))
         if job.kind == "IMAGE":
             shot.current_image_asset_id = asset.id
+            # A video is derived from the previously selected image. Once a
+            # new image succeeds, that downstream video can no longer be
+            # treated as current or reviewed.
+            shot.current_video_asset_id = None
         elif job.kind == "VIDEO":
             shot.current_video_asset_id = asset.id
         else:
@@ -168,7 +174,8 @@ def fail_job(job_id: str, owner: str, error: Exception) -> None:
         record(db, actor_type="WORKER", actor_id=owner, action="generation.fail", resource_type="generation_job", resource_id=job.id, workspace_id=job.workspace_id, project_id=job.project_id, trace_id=job.trace_id, agent_run_id=job.agent_run_id, result="FAILED", safe_summary=job.error_code)
         db.commit()
         project_id, provider = job.project_id, job.provider
-    registry.failure(provider)
+    if retryable:
+        registry.failure(provider)
     publish(project_id, "generation.failed", {"job_id": job_id, "retrying": retryable})
 
 
@@ -189,7 +196,7 @@ def process_generation(job_id: str):
             with SessionLocal() as db:
                 shot = db.get(Shot, job.resource_id)
                 db.expunge(shot)
-            inspection = inspect_media(shot, result, job.provider)
+            inspection = inspect_media(shot, result, job.provider, job.input_json.get("prompt", ""))
             complete_job(job_id, owner, result, inspection)
     except Exception as error:
         fail_job(job_id, owner, error)

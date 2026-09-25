@@ -8,6 +8,14 @@ let refreshing: Promise<string | null> | null = null
 export function setAccessToken(token: string | null) { accessToken = token }
 export function getAccessToken() { return accessToken }
 
+export function refreshAccessToken(): Promise<string | null> {
+  refreshing ||= axios.post<Envelope<{ access_token: string }>>('/api/v1/auth/refresh', {}, { withCredentials: true })
+    .then(response => { setAccessToken(response.data.data.access_token); return response.data.data.access_token })
+    .catch(() => { setAccessToken(null); return null })
+    .finally(() => { refreshing = null })
+  return refreshing
+}
+
 const client = axios.create({ baseURL: '/api/v1', withCredentials: true })
 client.interceptors.request.use(config => {
   if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`
@@ -17,11 +25,7 @@ client.interceptors.response.use(response => response, async (error: AxiosError<
   const original = error.config as (AxiosRequestConfig & { _retried?: boolean }) | undefined
   if (error.response?.status === 401 && original && !original._retried && !original.url?.includes('/auth/refresh') && !original.url?.includes('/auth/login')) {
     original._retried = true
-    refreshing ||= axios.post<Envelope<{ access_token: string }>>('/api/v1/auth/refresh', {}, { withCredentials: true })
-      .then(response => { setAccessToken(response.data.data.access_token); return response.data.data.access_token })
-      .catch(() => { setAccessToken(null); return null })
-      .finally(() => { refreshing = null })
-    const token = await refreshing
+    const token = await refreshAccessToken()
     if (token) {
       original.headers = { ...original.headers, Authorization: `Bearer ${token}` } as typeof original.headers
       return client.request(original)
@@ -44,6 +48,11 @@ export const api = {
   get: <T>(url: string) => request<T>({ method: 'GET', url }),
   post: <T>(url: string, data?: unknown) => request<T>({ method: 'POST', url, data }),
   patch: <T>(url: string, data?: unknown) => request<T>({ method: 'PATCH', url, data }),
+  upload: <T>(url: string, file: File) => {
+    const data = new FormData()
+    data.append('file', file)
+    return request<T>({ method: 'POST', url, data })
+  },
   blob: async (url: string) => {
     const response = await client.get(url, { responseType: 'blob' })
     return URL.createObjectURL(response.data as Blob)

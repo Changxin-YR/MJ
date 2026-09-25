@@ -1,13 +1,10 @@
-from datetime import timedelta
-
 import pytest
 
-from app.agent.inspector import CHECKS
+from app.agent.inspector import CHECKS, _frames
 from app.asset.storage import validate
 from app.config import settings
 from app.generation.service import apply_chinese_image_policy
-from app.models import now
-from app.providers import dashscope
+from app.providers import dashscope, embeddings
 from app.providers.fake import FakeImageProvider, FakeTTSProvider, FakeVideoProvider
 from app.providers.registry import ProviderRegistry
 
@@ -20,26 +17,32 @@ def test_fake_media_providers_obey_contract():
     assert video_provider.get_status(task_id) == "SUCCEEDED"
     video = video_provider.fetch_result(task_id)
     assert validate(video)[2] >= 1.9
+    sampled = _frames(video)
+    assert len(sampled) == 4
+    assert all(frame.startswith(b"\xff\xd8") for frame in sampled)
     voice = FakeTTSProvider().synthesize("Hello", 2)
     assert validate(voice)[2] >= 1.9
     video_provider.cancel(task_id)
 
 
-def test_provider_circuit_falls_back_and_recovers(monkeypatch):
+def test_provider_circuit_falls_back_across_registry_instances(monkeypatch):
     monkeypatch.setattr(settings, "provider_mode", "auto")
     monkeypatch.setattr(settings, "dashscope_api_key", "test-key")
     monkeypatch.setattr(settings, "comfyui_checkpoint", "")
-    registry = ProviderRegistry()
-    assert registry.route("IMAGE").provider == "dashscope"
-    for _ in range(3):
-        registry.failure("dashscope")
-    assert registry.entries["dashscope"].circuit == "OPEN"
-    assert registry.route("IMAGE").provider == "fake"
-    registry.entries["dashscope"].opened_at = now() - timedelta(seconds=31)
-    assert registry.route("IMAGE").provider == "dashscope"
-    assert registry.entries["dashscope"].circuit == "HALF_OPEN"
-    registry.success("dashscope")
-    assert registry.entries["dashscope"].circuit == "CLOSED"
+    worker_registry = ProviderRegistry()
+    api_registry = ProviderRegistry()
+    worker_registry.success("dashscope")
+    try:
+        assert api_registry.route("IMAGE").provider == "dashscope"
+        for _ in range(3):
+            worker_registry.failure("dashscope")
+        assert worker_registry.entries["dashscope"].circuit == "OPEN"
+        assert api_registry.route("IMAGE").provider == "fake"
+        worker_registry._redis().delete(worker_registry._open_key("dashscope"))
+        assert api_registry.route("IMAGE").provider == "dashscope"
+    finally:
+        worker_registry.success("dashscope")
+    assert worker_registry.entries["dashscope"].circuit == "CLOSED"
 
 
 def test_comfyui_mode_routes_images_locally_and_other_media_to_fake(monkeypatch):
@@ -79,6 +82,11 @@ def test_dashscope_disables_prompt_rewrite_and_forces_chinese_tts(monkeypatch):
     assert "简体中文招牌" in image_payload["input"]["messages"][0]["content"][0]["text"]
 
     with pytest.raises(CapturedPayload):
+        dashscope.DashScopeVideoProvider().submit(b"image", 3, "只允许简体中文可见文字")
+    video_payload = captured[-1]["payload"]
+    assert video_payload["parameters"]["prompt_extend"] is False
+
+    with pytest.raises(CapturedPayload):
         dashscope.DashScopeTTSProvider().synthesize("城市醒来了。", 2)
     tts_payload = captured[-1]["payload"]
     assert tts_payload["input"]["language_type"] == "Chinese"
@@ -93,3 +101,34 @@ def test_dashscope_tts_rejects_japanese_and_korean_scripts(text):
 
 def test_media_inspector_checks_visible_text_language():
     assert "visible_text_language" in CHECKS
+
+
+
+def test_dashscope_embedding_batches_texts_and_preserves_order(monkeypatch):
+    monkeypatch.setattr(settings, "dashscope_api_key", "test-key")
+    captured = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "data": [
+                    {"index": 1, "embedding": [2.0] * 1024},
+                    {"index": 0, "embedding": [1.0] * 1024},
+                ]
+            }
+
+    def fake_post(url, *, headers, json, timeout):
+        captured.update({"url": url, "headers": headers, "json": json, "timeout": timeout})
+        return Response()
+
+    monkeypatch.setattr(embeddings.httpx, "post", fake_post)
+    provider = embeddings.DashScopeEmbeddingProvider()
+    vectors = provider.embed_many(["第一段中文", "第二段中文"])
+    assert captured["json"]["input"] == ["第一段中文", "第二段中文"]
+    assert captured["json"]["dimensions"] == 1024
+    assert len(vectors) == 2
+    assert vectors[0][0] == 1.0
+    assert vectors[1][0] == 2.0

@@ -278,6 +278,9 @@ class PendingAction(IdMixin, ScopeMixin, Base):
 
 class KnowledgeDocument(IdMixin, ScopeMixin, Base):
     __tablename__ = "knowledge_documents"
+    __table_args__ = (
+        UniqueConstraint("project_id", "source_type", "source_id", name="uq_knowledge_document_project_source"),
+    )
     source_type: Mapped[str] = mapped_column(String(60), nullable=False)
     source_id: Mapped[str] = mapped_column(String(36), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE", nullable=False)
@@ -294,6 +297,7 @@ class KnowledgeVersion(IdMixin, ScopeMixin, Base):
 
 class Timeline(IdMixin, ScopeMixin, Base):
     __tablename__ = "timelines"
+    __table_args__ = (UniqueConstraint("project_id", "episode_id", name="uq_timeline_project_episode"),)
     episode_id: Mapped[str] = mapped_column(String(36), ForeignKey("episodes.id"), nullable=False)
     status: Mapped[str] = mapped_column(String(30), default="DRAFT", nullable=False)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)

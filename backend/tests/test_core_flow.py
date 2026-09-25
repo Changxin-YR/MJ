@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -74,3 +76,41 @@ def test_refresh_rotation_reuse_revokes_session():
     assert code == 401 and body["error"]["code"] == "AUTH_REQUIRED"
     code, body = call(client, "GET", "/api/v1/auth/me", token)
     assert code == 401
+
+
+
+def test_parallel_episode_creation_and_timeline_creation_are_serialized():
+    client = TestClient(app)
+    _, owner = register(client, "parallel-content")
+    code, body = call(client, "POST", "/api/v1/workspaces", owner, json={"name": "Parallel Studio"})
+    assert code == 200, body
+    workspace = body["data"]["id"]
+    code, body = call(client, "POST", f"/api/v1/workspaces/{workspace}/projects", owner, json={"name": "Parallel Project"})
+    assert code == 200, body
+    prefix = f"/api/v1/projects/{body['data']['id']}"
+
+    barrier = Barrier(2)
+
+    def create_episode(title):
+        with TestClient(app) as request_client:
+            barrier.wait()
+            return call(request_client, "POST", f"{prefix}/episodes", owner, json={"title": title})
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(create_episode, ["并发第一集", "并发第二集"]))
+    assert [code for code, _ in results] == [200, 200], results
+    episode_numbers = {body["data"]["episode_no"] for _, body in results}
+    assert episode_numbers == {1, 2}
+
+    episode_id = results[0][1]["data"]["id"]
+    barrier = Barrier(2)
+
+    def create_timeline(_):
+        with TestClient(app) as request_client:
+            barrier.wait()
+            return call(request_client, "POST", f"{prefix}/episodes/{episode_id}/timeline", owner)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        timeline_results = list(pool.map(create_timeline, range(2)))
+    assert [code for code, _ in timeline_results] == [200, 200], timeline_results
+    assert len({body["data"]["id"] for _, body in timeline_results}) == 1

@@ -1,17 +1,28 @@
-from fastapi import APIRouter, Depends, Request
+import logging
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, File, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ok, trace_id
-from app.asset.storage import client, create_quarantine_asset, promote_quarantine
+from app.asset.storage import (
+    MAX_SIZE,
+    client,
+    create_quarantine_asset,
+    promote_quarantine,
+    store_result,
+)
 from app.audit.service import record
 from app.auth.dependencies import ProjectScope, project_scope, require, scoped_get
 from app.db import get_db
 from app.models import Asset
+from app.providers.base import MediaResult
 
 router = APIRouter(prefix="/projects/{project_id}/assets", tags=["assets"])
+logger = logging.getLogger(__name__)
 
 
 class UploadIntent(BaseModel):
@@ -34,6 +45,48 @@ def create_upload(payload: UploadIntent, request: Request, scope: ProjectScope =
     return ok(request, {"asset": asset_data(asset), "upload_url": url, "expires_in_seconds": 600})
 
 
+@router.post("/uploads/direct")
+async def direct_upload(
+    request: Request,
+    file: UploadFile = File(...),
+    scope: ProjectScope = Depends(project_scope),
+    db: Session = Depends(get_db),
+):
+    require(scope, "content.edit")
+    mime = file.content_type or ""
+    if mime not in {"image/png", "video/mp4", "audio/wav", "audio/x-wav"}:
+        raise APIError("INVALID_PARAMETER", "Unsupported upload type", 422)
+    data = await file.read(MAX_SIZE + 1)
+    await file.close()
+    if not data or len(data) > MAX_SIZE:
+        raise APIError("INVALID_PARAMETER", "Invalid asset size", 422)
+    normalized_mime = "audio/wav" if mime == "audio/x-wav" else mime
+    asset = store_result(
+        workspace_id=scope.workspace_id,
+        project_id=scope.project_id,
+        job_id=f"upload-{uuid4()}",
+        result=MediaResult(content=data, mime=normalized_mime),
+        source_job_id=None,
+    )
+    asset.source_job_id = None
+    db.add(asset)
+    db.flush()
+    record(
+        db,
+        actor_type="USER",
+        actor_id=scope.user_id,
+        action="asset.upload.direct",
+        resource_type="asset",
+        resource_id=asset.id,
+        workspace_id=scope.workspace_id,
+        project_id=scope.project_id,
+        trace_id=trace_id(request),
+        safe_summary=normalized_mime,
+    )
+    db.commit()
+    return ok(request, asset_data(asset))
+
+
 @router.post("/uploads/{asset_id}/finalize")
 def finalize_upload(asset_id: str, request: Request, scope: ProjectScope = Depends(project_scope), db: Session = Depends(get_db)):
     require(scope, "content.edit")
@@ -43,7 +96,10 @@ def finalize_upload(asset_id: str, request: Request, scope: ProjectScope = Depen
     quarantine_key = promote_quarantine(asset, asset.size)
     record(db, actor_type="USER", actor_id=scope.user_id, action="asset.upload.finalize", resource_type="asset", resource_id=asset.id, workspace_id=scope.workspace_id, project_id=scope.project_id, trace_id=trace_id(request))
     db.commit()
-    client().remove_object(asset.bucket, quarantine_key)
+    try:
+        client().remove_object(asset.bucket, quarantine_key)
+    except Exception:
+        logger.warning("quarantine cleanup failed after successful finalize", exc_info=True)
     return ok(request, asset_data(asset))
 
 

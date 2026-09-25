@@ -1,4 +1,5 @@
 import random
+import re
 from datetime import timedelta
 from decimal import Decimal
 
@@ -8,7 +9,15 @@ from sqlalchemy.orm import Session
 from app.api.errors import APIError
 from app.auth.dependencies import ProjectScope, require
 from app.config import settings
-from app.models import GenerationJob, OutboxEvent, Project, Shot
+from app.models import (
+    Character,
+    CharacterVersion,
+    GenerationJob,
+    OutboxEvent,
+    Project,
+    Scene,
+    Shot,
+)
 from app.providers.registry import registry
 from app.storyboard.state import transition_job, transition_shot
 
@@ -17,6 +26,8 @@ IMAGE_CHINESE_TEXT_RULE = (
     "只能使用简体中文；禁止日文假名、韩文谚文、繁体中文和其他外语文字；"
     "如果文字不是剧情必需，则不要生成任何文字。"
 )
+FOREIGN_ASIAN_SCRIPT = re.compile(r"[\u3040-\u30ff\u31f0-\u31ff\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]")
+
 IMAGE_NON_CHINESE_TEXT_NEGATIVE = (
     "日文，日语文字，平假名，片假名，韩文，韩语文字，谚文，繁体中文，"
     "英文文字，乱码，伪文字，错误字符"
@@ -35,6 +46,97 @@ def apply_chinese_image_policy(prompt: str, negative_prompt: str) -> tuple[str, 
         else IMAGE_NON_CHINESE_TEXT_NEGATIVE
     )
     return constrained_prompt, constrained_negative
+
+
+def build_generation_prompt(db: Session, scope: ProjectScope, shot: Shot) -> tuple[str, str]:
+    project = db.scalar(
+        select(Project).where(
+            Project.id == scope.project_id,
+            Project.workspace_id == scope.workspace_id,
+        )
+    )
+    if not project:
+        raise APIError("RESOURCE_NOT_FOUND", "Project not found", 404)
+    project_style = str((project.settings_json or {}).get("style", "")).strip()
+    scene = db.scalar(
+        select(Scene).where(
+            Scene.id == shot.scene_id,
+            Scene.workspace_id == scope.workspace_id,
+            Scene.project_id == scope.project_id,
+        )
+    )
+    if not scene:
+        raise APIError("RESOURCE_NOT_FOUND", "Scene not found", 404)
+    scene_context = ". ".join(filter(None, [scene.heading, scene.description]))
+    camera_context = "；".join(
+        filter(
+            None,
+            [
+                f"景别：{shot.shot_type}" if shot.shot_type else "",
+                f"机位：{shot.camera_angle}" if shot.camera_angle else "",
+                f"镜头运动：{shot.camera_movement}" if shot.camera_movement else "",
+                f"情绪：{shot.emotion}" if shot.emotion else "",
+            ],
+        )
+    )
+    anchors: list[str] = []
+    negatives: list[str] = []
+    for character_id in shot.character_ids:
+        character = db.scalar(
+            select(Character).where(
+                Character.id == character_id,
+                Character.workspace_id == scope.workspace_id,
+                Character.project_id == scope.project_id,
+            )
+        )
+        if not character:
+            raise APIError("RESOURCE_NOT_FOUND", "Character not found", 404)
+        if not character.active_version_id:
+            continue
+        version = db.scalar(
+            select(CharacterVersion).where(
+                CharacterVersion.id == character.active_version_id,
+                CharacterVersion.character_id == character.id,
+                CharacterVersion.workspace_id == scope.workspace_id,
+                CharacterVersion.project_id == scope.project_id,
+                CharacterVersion.status == "ACTIVE",
+            )
+        )
+        if not version:
+            raise APIError("RESOURCE_CONFLICT", "Active character version is unavailable", 409)
+        dna = version.dna or {}
+        anchors.append(
+            "; ".join(
+                filter(
+                    None,
+                    [
+                        f"{character.name}: {dna.get('prompt_anchor', '')}".strip(),
+                        f"face {dna.get('face', '')}".strip() if dna.get("face") else "",
+                        f"hair {dna.get('hair', '')}".strip() if dna.get("hair") else "",
+                        f"costume {dna.get('costume', '')}".strip() if dna.get("costume") else "",
+                        f"style {dna.get('style', '')}".strip() if dna.get("style") else "",
+                    ],
+                )
+            )
+        )
+        if dna.get("negative_prompt"):
+            negatives.append(str(dna["negative_prompt"]).strip())
+    prompt = ". ".join(
+        filter(
+            None,
+            [
+                f"场景：{scene_context}" if scene_context else "",
+                shot.description,
+                shot.action,
+                f"镜头参数：{camera_context}" if camera_context else "",
+                shot.prompt,
+                f"项目统一视觉风格：{project_style}" if project_style else "",
+                *anchors,
+            ],
+        )
+    )
+    negative_prompt = ", ".join(filter(None, [shot.negative_prompt, *negatives]))
+    return prompt, negative_prompt
 
 
 def reserve(db: Session, project: Project, amount: Decimal) -> None:
@@ -67,6 +169,8 @@ def request_generation(db: Session, scope: ProjectScope, shot_id: str, kind: str
         raise APIError("RESOURCE_CONFLICT", "Generate image first", 409)
     if kind == "VOICE" and not shot.dialogue.strip():
         raise APIError("INVALID_PARAMETER", "Dialogue required for voice", 422)
+    if kind == "VOICE" and FOREIGN_ASIAN_SCRIPT.search(shot.dialogue):
+        raise APIError("INVALID_PARAMETER", "Voice dialogue must not contain Japanese or Korean script", 422)
     entry = registry.route(kind)
     estimate = Decimal(str(entry.cost[kind])) * (Decimal(str(shot.duration)) if kind == "VIDEO" else Decimal(1))
     reserve(db, project, estimate)
@@ -77,9 +181,8 @@ def request_generation(db: Session, scope: ProjectScope, shot_id: str, kind: str
         model = settings.comfyui_checkpoint
     else:
         model = f"fake-{kind.lower()}-v1"
-    prompt = ". ".join(filter(None, [shot.description, shot.action, shot.prompt]))
-    negative_prompt = shot.negative_prompt
-    if kind == "IMAGE":
+    prompt, negative_prompt = build_generation_prompt(db, scope, shot)
+    if kind in {"IMAGE", "VIDEO"}:
         prompt, negative_prompt = apply_chinese_image_policy(prompt, negative_prompt)
     job = GenerationJob(workspace_id=scope.workspace_id, project_id=scope.project_id, provider=entry.provider, model=model, resource_type="shot", resource_id=shot.id, kind=kind, input_json={"prompt": prompt, "negative_prompt": negative_prompt, "duration": shot.duration, "dialogue": shot.dialogue, "image_asset_id": shot.current_image_asset_id}, idempotency_key=idempotency_key, estimated_cost=estimate, actual_cost=0, status="CREATED", trace_id=trace_id, agent_run_id=agent_run_id, tool_call_id=tool_call_id)
     db.add(job)

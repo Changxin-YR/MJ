@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ok, trace_id
 from app.audit.service import record
 from app.auth.dependencies import ProjectScope, project_scope, require, scoped_get
 from app.db import get_db
-from app.models import Character, CharacterVersion, Episode, Scene, Shot, now
+from app.generation.service import apply_chinese_image_policy, build_generation_prompt
+from app.models import Character, Episode, Project, Scene, Shot, now
 from app.storyboard.state import transition_shot
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["storyboard"])
@@ -85,7 +86,8 @@ def next_no(db: Session, model, column, scope: ProjectScope, parent_column=None,
     clauses = [model.workspace_id == scope.workspace_id, model.project_id == scope.project_id]
     if parent_column is not None:
         clauses.append(parent_column == parent_id)
-    return (db.scalar(select(func.max(column)).where(*clauses)) or 0) + 1
+    query = select(column).where(*clauses).order_by(column.desc()).limit(1).with_for_update()
+    return (db.scalar(query) or 0) + 1
 
 
 def validate_character_ids(db: Session, scope: ProjectScope, ids: list[str]):
@@ -96,6 +98,14 @@ def validate_character_ids(db: Session, scope: ProjectScope, ids: list[str]):
 @router.post("/episodes")
 def create_episode(payload: EpisodeCreate, request: Request, scope: ProjectScope = Depends(project_scope), db: Session = Depends(get_db)):
     require(scope, "content.edit")
+    project = db.scalar(
+        select(Project).where(
+            Project.id == scope.project_id,
+            Project.workspace_id == scope.workspace_id,
+        ).with_for_update()
+    )
+    if not project:
+        raise APIError("RESOURCE_NOT_FOUND", "Project not found", 404)
     e = Episode(workspace_id=scope.workspace_id, project_id=scope.project_id, episode_no=next_no(db, Episode, Episode.episode_no, scope), title=payload.title, synopsis=payload.synopsis)
     db.add(e)
     db.flush()
@@ -114,7 +124,15 @@ def list_episodes(request: Request, scope: ProjectScope = Depends(project_scope)
 @router.post("/episodes/{episode_id}/scenes")
 def create_scene(episode_id: str, payload: SceneCreate, request: Request, scope: ProjectScope = Depends(project_scope), db: Session = Depends(get_db)):
     require(scope, "content.edit")
-    scoped_get(db, Episode, episode_id, scope)
+    episode = db.scalar(
+        select(Episode).where(
+            Episode.id == episode_id,
+            Episode.workspace_id == scope.workspace_id,
+            Episode.project_id == scope.project_id,
+        ).with_for_update()
+    )
+    if not episode:
+        raise APIError("RESOURCE_NOT_FOUND", "Episode not found", 404)
     scene = Scene(workspace_id=scope.workspace_id, project_id=scope.project_id, episode_id=episode_id, scene_no=next_no(db, Scene, Scene.scene_no, scope, Scene.episode_id, episode_id), heading=payload.heading, description=payload.description)
     db.add(scene)
     db.flush()
@@ -150,7 +168,15 @@ def edit_scene(scene_id: str, payload: SceneEdit, request: Request, scope: Proje
 @router.post("/scenes/{scene_id}/shots")
 def create_shot(scene_id: str, payload: ShotCreate, request: Request, scope: ProjectScope = Depends(project_scope), db: Session = Depends(get_db)):
     require(scope, "content.edit")
-    scene = scoped_get(db, Scene, scene_id, scope)
+    scene = db.scalar(
+        select(Scene).where(
+            Scene.id == scene_id,
+            Scene.workspace_id == scope.workspace_id,
+            Scene.project_id == scope.project_id,
+        ).with_for_update()
+    )
+    if not scene:
+        raise APIError("RESOURCE_NOT_FOUND", "Scene not found", 404)
     validate_character_ids(db, scope, payload.character_ids)
     shot = Shot(workspace_id=scope.workspace_id, project_id=scope.project_id, episode_id=scene.episode_id, scene_id=scene_id, shot_no=next_no(db, Shot, Shot.shot_no, scope, Shot.scene_id, scene_id), **payload.model_dump())
     db.add(shot)
@@ -182,6 +208,8 @@ def edit_shot(shot_id: str, payload: ShotEdit, request: Request, scope: ProjectS
         raise APIError("RESOURCE_NOT_FOUND", "Shot not found", 404)
     if shot.status == "LOCKED":
         raise APIError("SHOT_LOCKED", "Shot is locked", 409)
+    if shot.status in {"GENERATING", "GENERATED", "INSPECTING"}:
+        raise APIError("RESOURCE_CONFLICT", "Shot cannot be edited while generation or inspection is active", 409)
     if shot.version != payload.expected_version:
         raise APIError("RESOURCE_VERSION_CONFLICT", "Shot changed", 409)
     updates = payload.model_dump(exclude_unset=True, exclude={"expected_version"})
@@ -189,8 +217,32 @@ def edit_shot(shot_id: str, payload: ShotEdit, request: Request, scope: ProjectS
         validate_character_ids(db, scope, updates["character_ids"])
     for key, value in updates.items():
         setattr(shot, key, value)
+    invalidated = bool(updates) and (
+        shot.current_image_asset_id
+        or shot.current_video_asset_id
+        or shot.current_audio_asset_id
+        or shot.inspection_json
+        or shot.status not in {"DRAFT", "PLANNED"}
+    )
+    if invalidated:
+        shot.current_image_asset_id = None
+        shot.current_video_asset_id = None
+        shot.current_audio_asset_id = None
+        shot.inspection_json = None
+        shot.status = "PLANNED"
     shot.version += 1
-    record(db, actor_type="USER", actor_id=scope.user_id, action="shot.edit", resource_type="shot", resource_id=shot.id, workspace_id=scope.workspace_id, project_id=scope.project_id, trace_id=trace_id(request))
+    record(
+        db,
+        actor_type="USER",
+        actor_id=scope.user_id,
+        action="shot.edit",
+        resource_type="shot",
+        resource_id=shot.id,
+        workspace_id=scope.workspace_id,
+        project_id=scope.project_id,
+        trace_id=trace_id(request),
+        safe_summary="derived media invalidated" if invalidated else "",
+    )
     db.commit()
     return ok(request, shot_data(shot))
 
@@ -208,10 +260,15 @@ def transition(shot_id: str, payload: ShotAction, request: Request, scope: Proje
         raise APIError("RESOURCE_NOT_FOUND", "Shot not found", 404)
     if shot.version != payload.expected_version:
         raise APIError("RESOURCE_VERSION_CONFLICT", "Shot changed", 409)
-    if payload.target == "APPROVED" and (shot.inspection_json or {}).get("status") == "FAIL" and not (payload.review_reason or "").strip():
+    inspection = shot.inspection_json or {}
+    if payload.target in {"APPROVED", "LOCKED"} and (inspection.get("checks") or {}).get("visible_text_language") == "FAIL":
+        raise APIError("LANGUAGE_POLICY_FAILED", "Non-Chinese visible text must be regenerated before approval", 409)
+    if payload.target in {"APPROVED", "LOCKED"} and not shot.current_video_asset_id:
+        raise APIError("RESOURCE_CONFLICT", "Generate and review the current video before final approval", 409)
+    if payload.target == "APPROVED" and inspection.get("status") == "FAIL" and not (payload.review_reason or "").strip():
         raise APIError("INSPECTION_FAILED", "A reason is required to approve a failed inspection", 409)
-    if payload.target == "APPROVED" and (shot.inspection_json or {}).get("status") == "FAIL":
-        shot.inspection_json = {**shot.inspection_json, "review_override": {"actor_id": scope.user_id, "reason": payload.review_reason.strip(), "video_asset_id": shot.current_video_asset_id, "reviewed_at": now().isoformat()}}
+    if payload.target == "APPROVED" and inspection.get("status") == "FAIL":
+        shot.inspection_json = {**inspection, "review_override": {"actor_id": scope.user_id, "reason": payload.review_reason.strip(), "video_asset_id": shot.current_video_asset_id, "reviewed_at": now().isoformat()}}
         if shot.status == "APPROVED":
             shot.version += 1
             record(db, actor_type="USER", actor_id=scope.user_id, action="shot.review_override", resource_type="shot", resource_id=shot.id, workspace_id=scope.workspace_id, project_id=scope.project_id, trace_id=trace_id(request), safe_summary=payload.review_reason.strip())
@@ -255,11 +312,6 @@ def reorder(shot_id: str, payload: Reorder, request: Request, scope: ProjectScop
 def built_prompt(shot_id: str, request: Request, scope: ProjectScope = Depends(project_scope), db: Session = Depends(get_db)):
     require(scope, "project.read")
     shot = scoped_get(db, Shot, shot_id, scope)
-    anchors, negatives = [], []
-    for cid in shot.character_ids:
-        c = scoped_get(db, Character, cid, scope)
-        if c.active_version_id:
-            v = scoped_get(db, CharacterVersion, c.active_version_id, scope)
-            anchors.append(f"{c.name}: {v.dna.get('prompt_anchor', '')}; face {v.dna.get('face', '')}; hair {v.dna.get('hair', '')}; costume {v.dna.get('costume', '')}; style {v.dna.get('style', '')}")
-            negatives.append(v.dna.get("negative_prompt", ""))
-    return ok(request, {"prompt": ". ".join(filter(None, [shot.description, shot.action, shot.prompt, *anchors])), "negative_prompt": ", ".join(filter(None, [shot.negative_prompt, *negatives]))})
+    prompt, negative_prompt = build_generation_prompt(db, scope, shot)
+    prompt, negative_prompt = apply_chinese_image_policy(prompt, negative_prompt)
+    return ok(request, {"prompt": prompt, "negative_prompt": negative_prompt})

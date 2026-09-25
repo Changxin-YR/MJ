@@ -25,7 +25,10 @@ def normalized_audio(data: bytes, directory: Path, index: int, target_seconds: f
     return (proc.stdout[:expected] + b"\x00" * max(0, expected - len(proc.stdout)))[:expected]
 
 
-def render_timeline(clips: list[tuple[Asset, Asset | None, str, float]]) -> MediaResult:
+def render_timeline(
+    clips: list[tuple[Asset, Asset | None, str, float]],
+    extra_audio: list[tuple[Asset, float, float, str]] | None = None,
+) -> MediaResult:
     if not clips:
         raise ValueError("Timeline has no clips")
     with tempfile.TemporaryDirectory() as temporary:
@@ -50,6 +53,14 @@ def render_timeline(clips: list[tuple[Asset, Asset | None, str, float]]) -> Medi
             wav.setframerate(22050)
             wav.writeframes(b"".join(audio_chunks))
         inputs += ["-i", str(audio_path)]
+        extra_audio = extra_audio or []
+        extra_inputs: list[tuple[int, float, float, str]] = []
+        for extra_index, (asset, start_seconds, duration_seconds, kind) in enumerate(extra_audio):
+            extra_path = directory / f"extra_{extra_index}.wav"
+            extra_path.write_bytes(download(asset))
+            input_index = len(clips) + 1 + extra_index
+            inputs += ["-i", str(extra_path)]
+            extra_inputs.append((input_index, start_seconds, duration_seconds, kind))
         filter_parts = [f"[{i}:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24,format=yuv420p,setpts=PTS-STARTPTS[v{i}]" for i in range(len(clips))]
         filter_parts.append("".join(f"[v{i}]" for i in range(len(clips))) + f"concat=n={len(clips)}:v=1:a=0[v]")
         video_map = "[v]"
@@ -58,8 +69,27 @@ def render_timeline(clips: list[tuple[Asset, Asset | None, str, float]]) -> Medi
             srt_path.write_text("\n".join(subtitles), encoding="utf-8")
             filter_parts.append(f"[v]subtitles={srt_path.as_posix()}[outv]")
             video_map = "[outv]"
+        audio_map = f"{len(clips)}:a"
+        if extra_inputs:
+            filter_parts.append(f"[{len(clips)}:a]volume=1.0[voice]")
+            audio_labels = ["[voice]"]
+            for index, (input_index, start_seconds, duration_seconds, kind) in enumerate(extra_inputs):
+                volume = 0.18 if kind == "MUSIC" else 0.55
+                delay_ms = max(0, round(start_seconds * 1000))
+                label = f"extra{index}"
+                filter_parts.append(
+                    f"[{input_index}:a]atrim=0:{duration_seconds:.3f},asetpts=PTS-STARTPTS,"
+                    f"adelay={delay_ms}:all=1,volume={volume}[{label}]"
+                )
+                audio_labels.append(f"[{label}]")
+            filter_parts.append(
+                "".join(audio_labels)
+                + f"amix=inputs={len(audio_labels)}:duration=longest:normalize=0,"
+                "alimiter=limit=0.95[aout]"
+            )
+            audio_map = "[aout]"
         output = directory / "final.mp4"
-        command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *inputs, "-filter_complex", ";".join(filter_parts), "-map", video_map, "-map", f"{len(clips)}:a", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-movflags", "+faststart", "-t", str(elapsed), str(output)]
+        command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *inputs, "-filter_complex", ";".join(filter_parts), "-map", video_map, "-map", audio_map, "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-movflags", "+faststart", "-t", str(elapsed), str(output)]
         subprocess.run(command, check=True, timeout=max(120, int(elapsed * 4)))
         return MediaResult(content=output.read_bytes(), mime="video/mp4", width=1280, height=720, duration=elapsed, model="ffmpeg-render-v1")
 

@@ -1,9 +1,11 @@
 import io
+import wave
 
 from fastapi.testclient import TestClient
 from PIL import Image
 from test_core_flow import call, register
 
+from app.asset import routes as asset_routes
 from app.asset.storage import client as minio_client
 from app.config import settings
 from app.main import app
@@ -49,3 +51,66 @@ def test_signed_quarantine_magic_and_project_scope():
     assert code == 200 and body["data"]["status"] == "READY"
     response = client.get(prefix + f"/{asset_id}/content", headers={"Authorization": f"Bearer {owner}"})
     assert response.status_code == 200 and response.content == valid
+
+
+
+def test_finalize_stays_successful_when_quarantine_cleanup_fails(monkeypatch):
+    client = TestClient(app)
+    _, owner = register(client, "upload-cleanup")
+    _, body = call(client, "POST", "/api/v1/workspaces", owner, json={"name": "Cleanup Uploads"})
+    workspace_id = body["data"]["id"]
+    _, body = call(client, "POST", f"/api/v1/workspaces/{workspace_id}/projects", owner, json={"name": "Cleanup Assets"})
+    project_id = body["data"]["id"]
+    prefix = f"/api/v1/projects/{project_id}/assets"
+
+    output = io.BytesIO()
+    Image.new("RGB", (32, 32), "#abcdef").save(output, format="PNG")
+    valid = output.getvalue()
+    code, body = call(client, "POST", prefix + "/uploads", owner, json={"mime": "image/png", "size": len(valid)})
+    assert code == 200, body
+    asset_id = body["data"]["asset"]["id"]
+    storage = minio_client()
+    key = f"{workspace_id}/{project_id}/quarantine/{asset_id}"
+    storage.put_object(settings.minio_bucket, key, io.BytesIO(valid), len(valid))
+
+    class CleanupFailure:
+        def remove_object(self, *_args, **_kwargs):
+            raise RuntimeError("simulated cleanup outage")
+
+    monkeypatch.setattr(asset_routes, "client", lambda: CleanupFailure())
+    code, body = call(client, "POST", prefix + f"/uploads/{asset_id}/finalize", owner)
+    assert code == 200 and body["data"]["status"] == "READY"
+
+
+
+def test_direct_wav_upload_is_validated_and_ready():
+    client = TestClient(app)
+    _, owner = register(client, "upload-direct-wav")
+    _, body = call(client, "POST", "/api/v1/workspaces", owner, json={"name": "Direct Audio"})
+    workspace_id = body["data"]["id"]
+    _, body = call(client, "POST", f"/api/v1/workspaces/{workspace_id}/projects", owner, json={"name": "Audio Assets"})
+    prefix = f"/api/v1/projects/{body['data']['id']}/assets"
+
+    output = io.BytesIO()
+    with wave.open(output, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(22050)
+        wav.writeframes(b"\x00\x00" * 2205)
+    audio = output.getvalue()
+
+    response = client.post(
+        prefix + "/uploads/direct",
+        headers={"Authorization": f"Bearer {owner}"},
+        files={"file": ("music.wav", audio, "audio/wav")},
+    )
+    assert response.status_code == 200, response.text
+    asset = response.json()["data"]
+    assert asset["status"] == "READY"
+    assert asset["mime"] == "audio/wav"
+    assert 0.09 <= asset["duration"] <= 0.11
+    stored = client.get(
+        prefix + f"/{asset['id']}/content",
+        headers={"Authorization": f"Bearer {owner}"},
+    )
+    assert stored.status_code == 200 and stored.content == audio
