@@ -13,3 +13,8 @@
 | 审计 | audit_logs | actor、资源、trace、结果与安全摘要 |
 
 适用表同时存储 `workspace_id`、`project_id`。资源读取在 SQL 条件中限制两级 Scope。镜头、场景、角色与时间线修改使用版本号；并发预算预留对 Project 行加锁。媒体字节只存 MinIO，数据库 Asset 只存对象键、类型、哈希、大小、尺寸、时长和状态。
+
+
+## 预留但未开放的 Schema
+
+当前迁移中仍保留 `project_bibles` 与 `character_relationships` 两张扩展表，模型层也有对应类型；但当前 V1 产品没有为它们提供独立 API、前端工作台或 Director 写入闭环，因此它们属于后续扩展预留，不计入“已实现功能”。现有角色背景/DNA 由 `characters + character_versions` 管理，故事事实与中文对白上下文由 `story_sources + knowledge_documents/knowledge_versions + Qdrant` 管理。面试、README 和验收材料不应把这两张预留表描述成已经可用的世界观/关系图功能。

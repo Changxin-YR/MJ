@@ -87,9 +87,12 @@ def plan(state: DirectorState):
                 ],
                 "retrieved_sources": [
                     {
-                        "text": source["text"][:1200],
+                        "text": source["text"][:1800],
                         "score": source.get("score"),
                         "chunk_kind": source.get("chunk_kind", "legacy"),
+                        "speaker_hints": source.get("speaker_hints", []),
+                        "has_subjectless_dialogue": source.get("has_subjectless_dialogue", False),
+                        "context_expanded": source.get("context_expanded", False),
                     }
                     for source in state.get("story_context", [])[:5]
                 ],

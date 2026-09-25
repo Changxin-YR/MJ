@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     dashscope_image_size: str = "1280*1280"
     dashscope_video_model: str = "wan2.6-i2v-flash"
     dashscope_tts_model: str = "qwen3-tts-flash"
+    dashscope_asr_model: str = "qwen3-asr-flash"
     dashscope_chat_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     dashscope_vision_model: str = "qwen3-vl-plus"
     embedding_mode: str = "fake"

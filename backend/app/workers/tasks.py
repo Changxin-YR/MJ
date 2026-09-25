@@ -123,7 +123,11 @@ def complete_job(job_id: str, owner: str, result, inspection: dict) -> None:
         elif job.kind == "VIDEO":
             shot.current_video_asset_id = asset.id
         else:
-            shot.current_audio_asset_id = asset.id
+            # Voice is promoted only after ASR confirms Chinese speech and
+            # sufficient transcript agreement. Failed voice assets remain in
+            # lineage for diagnosis but cannot enter the current timeline.
+            if inspection.get("status") == "PASS":
+                shot.current_audio_asset_id = asset.id
         # The shot displays the current visual review. A later voice job has
         # only a technical audio check and must not erase image/video findings.
         if job.kind != "VOICE" or not shot.inspection_json:

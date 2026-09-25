@@ -3,8 +3,10 @@
 import base64
 import io
 import json
+import re
 import subprocess
 import tempfile
+from difflib import SequenceMatcher
 from pathlib import Path
 
 import httpx
@@ -74,6 +76,81 @@ def _frames(result: MediaResult) -> list[bytes]:
         return frames
 
 
+def _normalize_dialogue(text: str) -> str:
+    return re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]+", "", text).lower()
+
+
+def _message_text(content) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict) and item.get("text"):
+                parts.append(str(item["text"]))
+            elif isinstance(item, str):
+                parts.append(item)
+        return "".join(parts).strip()
+    return ""
+
+
+def _audio_inspection(shot: Shot, result: MediaResult) -> dict:
+    checks = {key: "UNVERIFIED" for key in CHECKS}
+    checks["voice_language"] = "UNVERIFIED"
+    encoded = base64.b64encode(result.content).decode("ascii")
+    response = httpx.post(
+        f"{settings.dashscope_chat_base_url.rstrip('/')}/chat/completions",
+        headers={"Authorization": f"Bearer {settings.dashscope_api_key}"},
+        json={
+            "model": settings.dashscope_asr_model,
+            "messages": [{
+                "role": "user",
+                "content": [{
+                    "type": "input_audio",
+                    "input_audio": {"data": f"data:audio/wav;base64,{encoded}"},
+                }],
+            }],
+            "stream": False,
+            "asr_options": {"enable_itn": False},
+        },
+        timeout=90,
+    )
+    response.raise_for_status()
+    message = response.json()["choices"][0]["message"]
+    transcript = _message_text(message.get("content"))
+    annotations = message.get("annotations") or []
+    language = next(
+        (
+            str(item.get("language") or "")
+            for item in annotations
+            if isinstance(item, dict) and item.get("type") == "audio_info"
+        ),
+        "",
+    )
+    expected = _normalize_dialogue(shot.dialogue)
+    recognized = _normalize_dialogue(transcript)
+    similarity = SequenceMatcher(None, expected, recognized).ratio() if expected and recognized else 0.0
+
+    checks["voice_language"] = "PASS" if language == "zh" else "FAIL"
+    checks["dialogue"] = "PASS" if similarity >= 0.55 else "FAIL"
+    issues: list[str] = []
+    if language != "zh":
+        issues.append(f"Voice language is {language or 'unknown'}, expected zh")
+    if similarity < 0.55:
+        issues.append("ASR transcript does not sufficiently match the expected Chinese dialogue")
+    status = "FAIL" if issues else "PASS"
+    return {
+        "status": status,
+        "score": similarity,
+        "issues": issues,
+        "checks": checks,
+        "method": "QWEN_ASR",
+        "model": settings.dashscope_asr_model,
+        "language": language,
+        "transcript": transcript[:1000],
+    }
+
+
 def _visual_inspection(shot: Shot, frames: list[bytes], generation_prompt: str = "") -> dict:
     context = {
         "description": shot.description[:1000],
@@ -131,7 +208,22 @@ def _visual_inspection(shot: Shot, frames: list[bytes], generation_prompt: str =
 def inspect_media(shot: Shot, result: MediaResult, provider: str, generation_prompt: str = "") -> dict:
     checks = {key: "UNVERIFIED" for key in CHECKS}
     if result.mime == "audio/wav":
+        if provider == "dashscope" and settings.dashscope_api_key:
+            try:
+                return _audio_inspection(shot, result)
+            except (ValueError, KeyError, httpx.HTTPError) as error:
+                checks["dialogue"] = "FAIL"
+                checks["voice_language"] = "FAIL"
+                return {
+                    "status": "FAIL",
+                    "score": 0.0,
+                    "issues": [f"Voice language inspection unavailable: {type(error).__name__}"],
+                    "checks": checks,
+                    "method": "QWEN_ASR",
+                    "model": settings.dashscope_asr_model,
+                }
         checks["dialogue"] = "UNVERIFIED"
+        checks["voice_language"] = "UNVERIFIED"
         return {"status": "PASS", "score": 0.0, "issues": ["Voice content requires listening during human review"], "checks": checks, "method": "TECHNICAL_ONLY"}
     if provider == "fake" or not settings.dashscope_api_key:
         return {"status": "PASS", "score": 0.0, "issues": ["Visual and story checks require model inspection during human review"], "checks": checks, "method": "TECHNICAL_ONLY"}
