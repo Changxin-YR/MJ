@@ -7,7 +7,11 @@ import type { Asset, Episode, Project, Timeline } from '../../types'
 const props = defineProps<{ project: Project; canEdit: boolean; eventRevision: number }>()
 const root = computed(() => `/projects/${props.project.id}`)
 const episodes = ref<Episode[]>([]); const episodeId = ref(''); const timeline = ref<Timeline | null>(null); const videoUrl = ref(''); const busy = ref(false); const error = ref(''); const notice = ref(''); const audioFile = ref<File | null>(null); const audioKind = ref('MUSIC'); const audioStart = ref(0)
-const duration = computed(() => Math.max(0, ...(timeline.value?.items || []).map(i => i.start_seconds + i.duration_seconds)))
+const duration = computed(() => {
+  const videoTrack = timeline.value?.tracks.find(track => track.kind === 'VIDEO')
+  if (!videoTrack) return 0
+  return Math.max(0, ...(timeline.value?.items || []).filter(item => item.track_id === videoTrack.id).map(item => item.start_seconds + item.duration_seconds))
+})
 async function loadEpisodes() { episodes.value = await api.get(`${root.value}/episodes`); if (!episodeId.value && episodes.value.length) episodeId.value = episodes.value[0].id; await load() }
 async function load() { if (!episodeId.value) return; try { timeline.value = await api.get(`${root.value}/episodes/${episodeId.value}/timeline`); await loadVideo() } catch (cause) { if (cause instanceof ApiError && cause.code === 'RESOURCE_NOT_FOUND') timeline.value = null; else error.value = (cause as Error).message } }
 async function loadVideo() { if (videoUrl.value) URL.revokeObjectURL(videoUrl.value); videoUrl.value = timeline.value?.final_asset_id ? await api.blob(`${root.value}/assets/${timeline.value.final_asset_id}/content`) : '' }
