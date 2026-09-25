@@ -259,10 +259,13 @@ def transition(shot_id: str, payload: ShotAction, request: Request, scope: Proje
         raise APIError("RESOURCE_NOT_FOUND", "Shot not found", 404)
     if shot.version != payload.expected_version:
         raise APIError("RESOURCE_VERSION_CONFLICT", "Shot changed", 409)
-    if payload.target == "APPROVED" and (shot.inspection_json or {}).get("status") == "FAIL" and not (payload.review_reason or "").strip():
+    inspection = shot.inspection_json or {}
+    if payload.target == "APPROVED" and (inspection.get("checks") or {}).get("visible_text_language") == "FAIL":
+        raise APIError("LANGUAGE_POLICY_FAILED", "Non-Chinese visible text must be regenerated before approval", 409)
+    if payload.target == "APPROVED" and inspection.get("status") == "FAIL" and not (payload.review_reason or "").strip():
         raise APIError("INSPECTION_FAILED", "A reason is required to approve a failed inspection", 409)
-    if payload.target == "APPROVED" and (shot.inspection_json or {}).get("status") == "FAIL":
-        shot.inspection_json = {**shot.inspection_json, "review_override": {"actor_id": scope.user_id, "reason": payload.review_reason.strip(), "video_asset_id": shot.current_video_asset_id, "reviewed_at": now().isoformat()}}
+    if payload.target == "APPROVED" and inspection.get("status") == "FAIL":
+        shot.inspection_json = {**inspection, "review_override": {"actor_id": scope.user_id, "reason": payload.review_reason.strip(), "video_asset_id": shot.current_video_asset_id, "reviewed_at": now().isoformat()}}
         if shot.status == "APPROVED":
             shot.version += 1
             record(db, actor_type="USER", actor_id=scope.user_id, action="shot.review_override", resource_type="shot", resource_id=shot.id, workspace_id=scope.workspace_id, project_id=scope.project_id, trace_id=trace_id(request), safe_summary=payload.review_reason.strip())
