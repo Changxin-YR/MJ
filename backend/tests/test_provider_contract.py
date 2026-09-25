@@ -4,7 +4,7 @@ from app.agent.inspector import CHECKS, _frames
 from app.asset.storage import validate
 from app.config import settings
 from app.generation.service import apply_chinese_image_policy
-from app.providers import dashscope
+from app.providers import dashscope, embeddings
 from app.providers.fake import FakeImageProvider, FakeTTSProvider, FakeVideoProvider
 from app.providers.registry import ProviderRegistry
 
@@ -101,3 +101,34 @@ def test_dashscope_tts_rejects_japanese_and_korean_scripts(text):
 
 def test_media_inspector_checks_visible_text_language():
     assert "visible_text_language" in CHECKS
+
+
+
+def test_dashscope_embedding_batches_texts_and_preserves_order(monkeypatch):
+    monkeypatch.setattr(settings, "dashscope_api_key", "test-key")
+    captured = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "data": [
+                    {"index": 1, "embedding": [2.0] * 1024},
+                    {"index": 0, "embedding": [1.0] * 1024},
+                ]
+            }
+
+    def fake_post(url, *, headers, json, timeout):
+        captured.update({"url": url, "headers": headers, "json": json, "timeout": timeout})
+        return Response()
+
+    monkeypatch.setattr(embeddings.httpx, "post", fake_post)
+    provider = embeddings.DashScopeEmbeddingProvider()
+    vectors = provider.embed_many(["第一段中文", "第二段中文"])
+    assert captured["json"]["input"] == ["第一段中文", "第二段中文"]
+    assert captured["json"]["dimensions"] == 1024
+    assert len(vectors) == 2
+    assert vectors[0][0] == 1.0
+    assert vectors[1][0] == 2.0
