@@ -19,6 +19,10 @@ def test_render_approved_timeline_to_playable_mp4():
     code, body = call(client, "PATCH", f"{prefix}/shots/{shot['id']}", token, json={"expected_version": shot["version"], "dialogue": f"The city is waking up;$(touch {sentinel})"})
     assert code == 200, body
     shot = body["data"]
+    assert shot["status"] == "PLANNED"
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/transition", token, json={"expected_version": shot["version"], "target": "STORYBOARD_READY"})
+    assert code == 200, body
+    shot = body["data"]
     for kind in ("IMAGE", "VIDEO", "VOICE"):
         code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": kind, "idempotency_key": str(uuid4())})
         assert code == 200, body
