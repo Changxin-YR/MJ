@@ -2,6 +2,7 @@ from datetime import timedelta
 
 import pytest
 
+from app.agent.inspector import CHECKS
 from app.asset.storage import validate
 from app.config import settings
 from app.generation.service import apply_chinese_image_policy
@@ -82,3 +83,13 @@ def test_dashscope_disables_prompt_rewrite_and_forces_chinese_tts(monkeypatch):
     tts_payload = captured[-1]["payload"]
     assert tts_payload["input"]["language_type"] == "Chinese"
     assert tts_payload["input"]["text"] == "城市醒来了。"
+
+
+@pytest.mark.parametrize("text", ["こんにちは，城市。", "안녕하세요，城市。"])
+def test_dashscope_tts_rejects_japanese_and_korean_scripts(text):
+    with pytest.raises(ValueError, match="Chinese-only"):
+        dashscope._validate_chinese_tts_text(text)
+
+
+def test_media_inspector_checks_visible_text_language():
+    assert "visible_text_language" in CHECKS
