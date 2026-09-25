@@ -38,6 +38,15 @@ def apply_chinese_image_policy(prompt: str, negative_prompt: str) -> tuple[str, 
 
 
 def build_generation_prompt(db: Session, scope: ProjectScope, shot: Shot) -> tuple[str, str]:
+    project = db.scalar(
+        select(Project).where(
+            Project.id == scope.project_id,
+            Project.workspace_id == scope.workspace_id,
+        )
+    )
+    if not project:
+        raise APIError("RESOURCE_NOT_FOUND", "Project not found", 404)
+    project_style = str((project.settings_json or {}).get("style", "")).strip()
     anchors: list[str] = []
     negatives: list[str] = []
     for character_id in shot.character_ids:
@@ -80,7 +89,18 @@ def build_generation_prompt(db: Session, scope: ProjectScope, shot: Shot) -> tup
         )
         if dna.get("negative_prompt"):
             negatives.append(str(dna["negative_prompt"]).strip())
-    prompt = ". ".join(filter(None, [shot.description, shot.action, shot.prompt, *anchors]))
+    prompt = ". ".join(
+        filter(
+            None,
+            [
+                shot.description,
+                shot.action,
+                shot.prompt,
+                f"项目统一视觉风格：{project_style}" if project_style else "",
+                *anchors,
+            ],
+        )
+    )
     negative_prompt = ", ".join(filter(None, [shot.negative_prompt, *negatives]))
     return prompt, negative_prompt
 
