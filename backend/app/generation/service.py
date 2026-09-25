@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.errors import APIError
 from app.auth.dependencies import ProjectScope, require
 from app.config import settings
-from app.models import Character, CharacterVersion, GenerationJob, OutboxEvent, Project, Shot
+from app.models import Character, CharacterVersion, GenerationJob, OutboxEvent, Project, Scene, Shot
 from app.providers.registry import registry
 from app.storyboard.state import transition_job, transition_shot
 
@@ -50,6 +50,27 @@ def build_generation_prompt(db: Session, scope: ProjectScope, shot: Shot) -> tup
     if not project:
         raise APIError("RESOURCE_NOT_FOUND", "Project not found", 404)
     project_style = str((project.settings_json or {}).get("style", "")).strip()
+    scene = db.scalar(
+        select(Scene).where(
+            Scene.id == shot.scene_id,
+            Scene.workspace_id == scope.workspace_id,
+            Scene.project_id == scope.project_id,
+        )
+    )
+    if not scene:
+        raise APIError("RESOURCE_NOT_FOUND", "Scene not found", 404)
+    scene_context = ". ".join(filter(None, [scene.heading, scene.description]))
+    camera_context = "；".join(
+        filter(
+            None,
+            [
+                f"景别：{shot.shot_type}" if shot.shot_type else "",
+                f"机位：{shot.camera_angle}" if shot.camera_angle else "",
+                f"镜头运动：{shot.camera_movement}" if shot.camera_movement else "",
+                f"情绪：{shot.emotion}" if shot.emotion else "",
+            ],
+        )
+    )
     anchors: list[str] = []
     negatives: list[str] = []
     for character_id in shot.character_ids:
@@ -96,8 +117,10 @@ def build_generation_prompt(db: Session, scope: ProjectScope, shot: Shot) -> tup
         filter(
             None,
             [
+                f"场景：{scene_context}" if scene_context else "",
                 shot.description,
                 shot.action,
+                f"镜头参数：{camera_context}" if camera_context else "",
                 shot.prompt,
                 f"项目统一视觉风格：{project_style}" if project_style else "",
                 *anchors,
