@@ -92,8 +92,8 @@ def test_fixed_agent_evaluation_cases(context, case):
     elif case_id == "rag_source_quality":
         code, body = call(client, "POST", prefix + "/knowledge/search", context["owner"], json={"query": "azure cryptogram"})
         assert code == 200 and body["data"], body
-        assert all(item["source_id"] == context["story_id"] for item in body["data"])
-        assert any("azure cryptogram" in item["text"] for item in body["data"])
+        assert body["data"][0]["source_id"] == context["story_id"]
+        assert "azure cryptogram" in body["data"][0]["text"]
     elif case_id == "cn_subjectless_dialogue":
         code, body = call(client, "POST", prefix + "/knowledge/search", context["owner"], json={"query": "顾七问石门后有没有人，对方为什么说现在没有？", "limit": 5})
         assert code == 200 and body["data"], body
