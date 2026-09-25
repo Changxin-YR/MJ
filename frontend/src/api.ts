@@ -48,6 +48,11 @@ export const api = {
   get: <T>(url: string) => request<T>({ method: 'GET', url }),
   post: <T>(url: string, data?: unknown) => request<T>({ method: 'POST', url, data }),
   patch: <T>(url: string, data?: unknown) => request<T>({ method: 'PATCH', url, data }),
+  upload: <T>(url: string, file: File) => {
+    const data = new FormData()
+    data.append('file', file)
+    return request<T>({ method: 'POST', url, data })
+  },
   blob: async (url: string) => {
     const response = await client.get(url, { responseType: 'blob' })
     return URL.createObjectURL(response.data as Blob)
