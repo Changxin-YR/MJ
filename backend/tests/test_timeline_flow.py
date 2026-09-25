@@ -40,6 +40,22 @@ def test_render_approved_timeline_to_playable_mp4():
     assert code == 200, body
     timeline = body["data"]
     assert len(timeline["items"]) == 3
+    code, body = call(client, "POST", f"{prefix}/timelines/{timeline['id']}/audio-items", token, json={
+        "expected_version": timeline["version"],
+        "kind": "MUSIC",
+        "asset_id": shot["current_audio_asset_id"],
+        "start_seconds": 0.1,
+    })
+    assert code == 200, body
+    timeline = body["data"]
+    assert len(timeline["items"]) == 4
+    music_track = next(track for track in timeline["tracks"] if track["kind"] == "MUSIC")
+    assert any(item["track_id"] == music_track["id"] for item in timeline["items"])
+    code, body = call(client, "POST", f"{prefix}/timelines/{timeline['id']}/sync", token, json={"expected_version": timeline["version"]})
+    assert code == 200, body
+    timeline = body["data"]
+    assert len(timeline["items"]) == 4
+    assert any(item["track_id"] == music_track["id"] for item in timeline["items"])
     with SessionLocal() as db:
         current = db.get(Shot, shot["id"])
         current.inspection_json = {
