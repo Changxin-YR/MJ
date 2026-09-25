@@ -13,9 +13,9 @@ from app.api.errors import ok, trace_id
 from app.audit.service import record
 from app.auth.dependencies import ProjectScope, project_scope, require
 from app.config import settings
-from app.db import get_db
+from app.db import SessionLocal, get_db
 from app.generation.service import job_data, request_generation
-from app.models import GenerationJob
+from app.models import GenerationJob, ProjectMember, ServerSession, User, WorkspaceMember, now
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["generation"])
 
@@ -50,6 +50,35 @@ def get_job(job_id: str, request: Request, scope: ProjectScope = Depends(project
     return ok(request, job_data(job))
 
 
+def _stream_scope_valid(scope: ProjectScope) -> bool:
+    with SessionLocal() as db:
+        session = db.get(ServerSession, scope.session_id)
+        user = db.get(User, scope.user_id)
+        workspace_member = db.scalar(
+            select(WorkspaceMember).where(
+                WorkspaceMember.workspace_id == scope.workspace_id,
+                WorkspaceMember.user_id == scope.user_id,
+            )
+        )
+        project_member = db.scalar(
+            select(ProjectMember).where(
+                ProjectMember.workspace_id == scope.workspace_id,
+                ProjectMember.project_id == scope.project_id,
+                ProjectMember.user_id == scope.user_id,
+            )
+        )
+        return bool(
+            session
+            and session.user_id == scope.user_id
+            and not session.revoked_at
+            and session.expires_at > now()
+            and user
+            and not user.disabled
+            and workspace_member
+            and project_member
+        )
+
+
 @router.get("/events")
 def events(scope: ProjectScope = Depends(project_scope)):
     require(scope, "project.read")
@@ -60,6 +89,8 @@ def events(scope: ProjectScope = Depends(project_scope)):
         try:
             yield ": connected\n\n"
             while True:
+                if not _stream_scope_valid(scope):
+                    break
                 message = subscriber.get_message(ignore_subscribe_messages=True, timeout=15)
                 if message:
                     payload = json.loads(message["data"])
