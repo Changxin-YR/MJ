@@ -364,6 +364,10 @@ def index_story(db: Session, story: StorySource) -> KnowledgeDocument:
                 "dialogue_ratio": record["dialogue_ratio"],
                 "core_text": record["core_text"],
                 "text": record["text"],
+                "speaker_hints": record["speaker_hints"],
+                "lexical_tokens": record["lexical_tokens"],
+                "parent_start": record["parent_start"],
+                "parent_end": record["parent_end"],
             },
         )
         for record, vector in zip(records, vectors, strict=True)
