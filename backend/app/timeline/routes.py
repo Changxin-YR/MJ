@@ -64,12 +64,12 @@ def create_timeline(episode_id: str, request: Request, scope: ProjectScope = Dep
     if existing:
         return ok(request, timeline_data(db, existing))
     timeline = Timeline(workspace_id=scope.workspace_id, project_id=scope.project_id, episode_id=episode_id)
-    db.add(timeline)
-    db.flush()
-    for order_no, kind in enumerate(TRACK_KINDS):
-        db.add(TimelineTrack(workspace_id=scope.workspace_id, project_id=scope.project_id, timeline_id=timeline.id, kind=kind, order_no=order_no))
-    record(db, actor_type="USER", actor_id=scope.user_id, action="timeline.create", resource_type="timeline", resource_id=timeline.id, workspace_id=scope.workspace_id, project_id=scope.project_id, trace_id=trace_id(request))
     try:
+        db.add(timeline)
+        db.flush()
+        for order_no, kind in enumerate(TRACK_KINDS):
+            db.add(TimelineTrack(workspace_id=scope.workspace_id, project_id=scope.project_id, timeline_id=timeline.id, kind=kind, order_no=order_no))
+        record(db, actor_type="USER", actor_id=scope.user_id, action="timeline.create", resource_type="timeline", resource_id=timeline.id, workspace_id=scope.workspace_id, project_id=scope.project_id, trace_id=trace_id(request))
         db.commit()
     except IntegrityError:
         db.rollback()
