@@ -543,7 +543,6 @@ def retrieve(*, workspace_id: str, project_id: str, query: str, limit: int = 5) 
     for point in candidates.values():
         payload = point.payload or {}
         context_text = str(payload.get("text") or payload.get("core_text") or "")
-        core_text = str(payload.get("core_text") or context_text)
         if not context_text:
             continue
         lexical = _lexical_overlap(query, context_text)
