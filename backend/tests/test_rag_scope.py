@@ -174,3 +174,124 @@ def test_failed_reindex_preserves_previous_qdrant_points(monkeypatch):
         limit=5,
     )
     assert after and any("第三块砖" in item["text"] for item in after)
+
+
+
+class _FlatEmbedding(FakeEmbeddingProvider):
+    model = "flat-cn-dialogue-v1"
+    dimensions = 32
+    batch_size = 100
+
+    def embed(self, text: str) -> list[float]:
+        return [1.0] + [0.0] * (self.dimensions - 1)
+
+    def embed_many(self, texts: list[str]) -> list[list[float]]:
+        return [self.embed(text) for text in texts]
+
+
+def test_long_subjectless_dialogue_keeps_explicit_speaker_anchors():
+    lines = [
+        "顾七问：“你确定要进去？”",
+        "沈青衡道：“确定。”",
+    ]
+    for index in range(18):
+        lines.append(f"“第{index + 1}步照旧。”")
+        lines.append(f"“知道了，继续。”")
+    lines.extend(
+        [
+            "“钥匙不在门上。”",
+            "“那在哪里？”",
+            "“在第三块青砖后面。”",
+            "顾七沉默了一会儿。",
+            "“你早就知道？”",
+            "“刚刚才确认。”",
+        ]
+    )
+    records = build_chunk_records("\n".join(lines))
+    dialogue = [record for record in records if record["chunk_kind"] == "dialogue"]
+    assert dialogue
+    target = next(record for record in dialogue if "第三块青砖后面" in record["core_text"])
+    assert "第三块青砖后面" in target["text"]
+    assert {"顾七", "沈青衡"}.issubset(set(target["speaker_hints"]))
+    assert any("顾七问" in line for line in target["speaker_anchors"])
+    assert any("沈青衡道" in line for line in target["speaker_anchors"])
+
+
+def test_lexical_fallback_recalls_named_dialogue_when_dense_vectors_are_flat(monkeypatch):
+    client = TestClient(app)
+    _, token = register(client, "rag-lexical-fallback")
+    _, body = call(client, "POST", "/api/v1/workspaces", token, json={"name": "Lexical RAG"})
+    workspace = body["data"]["id"]
+    _, body = call(client, "POST", f"/api/v1/workspaces/{workspace}/projects", token, json={"name": "Lexical Project"})
+    project_id = body["data"]["id"]
+    prefix = f"/api/v1/projects/{project_id}"
+
+    filler = "\n".join(
+        f"第{index}段，院中风声渐紧，众人仍在讨论明日的杂役安排。" for index in range(80)
+    )
+    target = """
+顾七问：“那枚青铜钥匙最后放到哪里了？”
+“没放在柜子里。”
+“那到底在哪？”
+“第三块青砖后面。”
+“谁知道这件事？”
+“只有你和我。”
+"""
+    story_text = filler + "\n" + target
+    code, body = call(client, "POST", f"{prefix}/stories", token, json={"title": "长篇对白", "content": story_text})
+    assert code == 200, body
+    story_id = body["data"]["id"]
+
+    monkeypatch.setattr(rag_service, "selected_embedding_provider", lambda: _FlatEmbedding())
+    with SessionLocal() as db:
+        story = db.scalar(select(StorySource).where(StorySource.id == story_id))
+        assert story
+        rag_service.index_story(db, story)
+        db.commit()
+
+    results = rag_service.retrieve(
+        workspace_id=workspace,
+        project_id=project_id,
+        query="顾七问青铜钥匙到底在哪里，对方怎么回答？",
+        limit=5,
+    )
+    assert results
+    hit = next(item for item in results if "第三块青砖后面" in item["text"])
+    assert hit["lexical_score"] > 0
+    assert hit["retrieval_mode"] in {"lexical", "dense+lexical"}
+    assert "顾七" in hit["speaker_hints"]
+
+
+def test_dialogue_retrieval_deduplicates_heavily_overlapping_chunks():
+    client = TestClient(app)
+    _, token = register(client, "rag-overlap")
+    _, body = call(client, "POST", "/api/v1/workspaces", token, json={"name": "Overlap RAG"})
+    workspace = body["data"]["id"]
+    _, body = call(client, "POST", f"/api/v1/workspaces/{workspace}/projects", token, json={"name": "Overlap Project"})
+    project_id = body["data"]["id"]
+    prefix = f"/api/v1/projects/{project_id}"
+    story = """
+顾七问：“门后是谁？”
+“没人。”
+“你听见脚步了吗？”
+“听见了。”
+“那为什么说没人？”
+“因为脚步声来自楼上。”
+"""
+    _, body = call(client, "POST", f"{prefix}/stories", token, json={"title": "重叠对白", "content": story})
+    story_id = body["data"]["id"]
+    code, body = call(client, "POST", f"{prefix}/knowledge/stories/{story_id}/index", token)
+    assert code == 200, body
+    results = rag_service.retrieve(
+        workspace_id=workspace,
+        project_id=project_id,
+        query="顾七问门后是谁，对方为什么说没人？",
+        limit=5,
+    )
+    assert results
+    ranges = [
+        (item["source_id"], item.get("unit_start"), item.get("unit_end"))
+        for item in results
+    ]
+    assert len(ranges) == len(set(ranges))
+    assert any("脚步声来自楼上" in item["text"] for item in results)
