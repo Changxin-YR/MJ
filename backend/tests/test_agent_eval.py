@@ -25,6 +25,19 @@ def context():
     story_id = body["data"]["id"]
     code, body = call(client, "POST", prefix + f"/knowledge/stories/{story_id}/index", owner)
     assert code == 200, body
+    dialogue_text = """顾七问：“石门后有人吗？”
+“现在没有。”
+“你怎么知道？”
+“脚印是旧的。”
+顾七又问：“那枚青铜钥匙呢？”
+“第三块青砖后面。”
+“谁知道？”
+“只有你和我。”"""
+    code, body = call(client, "POST", prefix + "/stories", owner, json={"title": "石门对白", "content": dialogue_text})
+    assert code == 200, body
+    dialogue_story_id = body["data"]["id"]
+    code, body = call(client, "POST", prefix + f"/knowledge/stories/{dialogue_story_id}/index", owner)
+    assert code == 200, body
     _, body = call(client, "POST", prefix + "/characters", owner, json={"name": "Mira", "dna": {"prompt_anchor": "blue raincoat and orange messenger bag"}})
     character = body["data"]
     version_id = character["versions"][0]["id"]
@@ -41,7 +54,7 @@ def context():
     assert code == 200, body
     code, body = call(client, "POST", prefix + "/members", owner, json={"email": viewer_email, "role": "VIEWER"})
     assert code == 200, body
-    return {"client": client, "owner": owner, "viewer": viewer, "prefix": prefix, "project": project, "shot": shot, "story_id": story_id, "character": character, "run": run}
+    return {"client": client, "owner": owner, "viewer": viewer, "prefix": prefix, "project": project, "shot": shot, "story_id": story_id, "dialogue_story_id": dialogue_story_id, "character": character, "run": run}
 
 
 @pytest.mark.parametrize("case", CASES, ids=[case["id"] for case in CASES])
@@ -81,5 +94,20 @@ def test_fixed_agent_evaluation_cases(context, case):
         assert code == 200 and body["data"], body
         assert all(item["source_id"] == context["story_id"] for item in body["data"])
         assert any("azure cryptogram" in item["text"] for item in body["data"])
+    elif case_id == "cn_subjectless_dialogue":
+        code, body = call(client, "POST", prefix + "/knowledge/search", context["owner"], json={"query": "顾七问石门后有没有人，对方为什么说现在没有？", "limit": 5})
+        assert code == 200 and body["data"], body
+        assert any(
+            item["source_id"] == context["dialogue_story_id"]
+            and "顾七" in item["text"]
+            and "脚印是旧的" in item["text"]
+            for item in body["data"]
+        )
+    elif case_id == "cn_character_dialogue_retrieval":
+        code, body = call(client, "POST", prefix + "/knowledge/search", context["owner"], json={"query": "顾七问青铜钥匙在哪里，对方怎么回答？", "limit": 5})
+        assert code == 200 and body["data"], body
+        hit = next(item for item in body["data"] if "第三块青砖后面" in item["text"])
+        assert hit["source_id"] == context["dialogue_story_id"]
+        assert hit.get("chunk_kind") == "dialogue"
     else:
         raise AssertionError(f"Unknown evaluation case: {case_id}")
