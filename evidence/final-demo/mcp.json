@@ -1,0 +1,13 @@
+{
+  "checked_at": "2026-09-23T06:07:07.283688+00:00",
+  "run_id": "add194e9-4ea7-4747-8367-12357e72f2f8",
+  "tool_names": [
+    "frameforge_load_project_context",
+    "frameforge_retrieve_semantic_context",
+    "frameforge_load_generation_job"
+  ],
+  "project_name": "黎明信使 · Dawn Courier",
+  "shot_count": 12,
+  "tool_error": false,
+  "status": "PASS"
+}

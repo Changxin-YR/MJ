@@ -1,0 +1,12 @@
+{
+  "verified_at_utc": "2026-09-23T06:45:32.668953+00:00",
+  "endpoint": "http://host.docker.internal:8189",
+  "checkpoint": "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors",
+  "workflow": "basic-t2i-v1",
+  "image_width": 1024,
+  "image_height": 576,
+  "image_bytes": 704626,
+  "image_sha256": "3a178e36e91730cc58c8ecd3b22793703bc86a2570edba2881671527f6930314",
+  "elapsed_seconds": 19.15,
+  "result": "PASS"
+}

@@ -1,0 +1,21 @@
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { BookOpen, Search, Upload } from 'lucide-vue-next'
+import { api } from '../../api'
+import type { Project, Story } from '../../types'
+const props = defineProps<{ project: Project; canEdit: boolean }>()
+const stories = ref<Story[]>([]); const selectedId = ref(''); const title = ref(''); const content = ref(''); const searchText = ref(''); const results = ref<{text:string; source_id:string; score:number}[]>([]); const busy = ref(false); const error = ref(''); const notice = ref('')
+const selected = computed(() => stories.value.find(s => s.id === selectedId.value))
+const root = computed(() => `/projects/${props.project.id}`)
+async function load() { stories.value = await api.get(`${root.value}/stories`); if (!selectedId.value && stories.value.length) selectedId.value = stories.value[0].id }
+async function importStory() { busy.value = true; error.value = ''; try { const story = await api.post<Story>(`${root.value}/stories`, { title: title.value, content: content.value }); stories.value.unshift(story); selectedId.value = story.id; title.value = ''; content.value = ''; notice.value = '故事已导入。' } catch (cause) { error.value = (cause as Error).message } finally { busy.value = false } }
+async function indexStory() { if (!selected.value) return; busy.value = true; error.value = ''; try { await api.post(`${root.value}/knowledge/stories/${selected.value.id}/index`); notice.value = '故事已进入项目知识索引。' } catch (cause) { error.value = (cause as Error).message } finally { busy.value = false } }
+async function search() { try { results.value = await api.post(`${root.value}/knowledge/search`, { query: searchText.value }); notice.value = `在当前项目找到 ${results.value.length} 条内容。` } catch (cause) { error.value = (cause as Error).message } }
+onMounted(load)
+</script>
+<template>
+  <div class="section-head"><div><div class="section-kicker">Story Studio</div><h1>故事工作室</h1><p>导入原作文本，并建立可按项目检索的语义上下文。</p></div></div>
+  <div v-if="error" class="error" style="margin-bottom:16px">{{ error }}</div><div v-if="notice" class="notice" style="margin-bottom:16px">{{ notice }}</div>
+  <div class="split"><div class="stack"><section v-if="canEdit" class="panel panel-pad"><h2>导入故事</h2><form @submit.prevent="importStory"><div class="field"><label>标题</label><input v-model="title" required maxlength="200" placeholder="故事标题" /></div><div class="field"><label>故事正文</label><textarea v-model="content" required minlength="20" rows="9" placeholder="粘贴真实故事或小说片段…"></textarea></div><button class="btn btn-primary" :disabled="busy"><Upload :size="15" />导入原作</button></form></section><section class="panel panel-pad"><div class="between"><h2>原作列表</h2><span class="muted">{{ stories.length }} 份</span></div><div v-if="stories.length" class="list"><button v-for="story in stories" :key="story.id" class="list-row" style="text-align:left;color:inherit" :class="{active:selectedId === story.id}" @click="selectedId = story.id"><div><strong>{{ story.title }}</strong><br><small>{{ new Date(story.created_at).toLocaleDateString('zh-CN') }}</small></div><BookOpen :size="15" /></button></div><div v-else class="empty"><div><strong>暂无原作</strong><p>导入故事后，角色与分镜会围绕它展开。</p></div></div></section></div>
+  <div class="stack"><section class="panel panel-pad"><div class="between"><h2>{{ selected?.title || '选择故事' }}</h2><button v-if="selected && canEdit" class="btn btn-sm" :disabled="busy" @click="indexStory">建立索引</button></div><div v-if="selected" class="story-text" style="max-height:500px;overflow:auto">{{ selected.content }}</div><div v-else class="empty"><div><strong>选择一份故事</strong><p>查看正文并建立知识索引。</p></div></div></section><section class="panel panel-pad"><h2>项目知识检索</h2><form class="row" @submit.prevent="search"><input v-model="searchText" required placeholder="检索人物、事件或世界规则…" /><button class="btn" aria-label="搜索"><Search :size="16" /></button></form><div v-if="results.length" class="list" style="margin-top:16px"><div v-for="(result,index) in results" :key="index" class="subtle-panel" style="padding:13px"><div class="mini-label">来源 {{ result.source_id.slice(0,8) }} · {{ result.score.toFixed(2) }}</div><p class="story-text" style="margin:7px 0 0">{{ result.text }}</p></div></div></section></div></div>
+</template>

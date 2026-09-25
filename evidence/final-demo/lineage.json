@@ -1,0 +1,409 @@
+{
+  "final_asset_id": "3e465302-8b94-45c3-bb85-6a5f4672bcb8",
+  "timeline_id": "77e25cbe-2aaf-4b3f-9ea4-ec5ea2fd541e",
+  "episode_id": "13a1d0f7-fc16-4c38-9540-d20d3ebe28bc",
+  "shots": [
+    {
+      "shot_id": "1f6b8825-9dc7-4cea-9278-a680d93ef319",
+      "shot_no": 3,
+      "assets": [
+        {
+          "asset_id": "add838c7-6f40-4d1c-9b3a-16b14dc22d4a",
+          "mime": "image/png",
+          "generation_job_id": "e9465d9e-178e-4324-9ce1-8ddb44037ceb",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "cc271ac7-e8e6-4e08-adb7-0e978c7747e0",
+          "mime": "video/mp4",
+          "generation_job_id": "c437e332-d4f6-4c65-801e-9d7952fe6951",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "53f3625b-7b30-471f-90f4-0bba90a598a0",
+          "mime": "audio/wav",
+          "generation_job_id": "0e374120-519b-4074-90b7-b5c433329926",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        }
+      ]
+    },
+    {
+      "shot_id": "f1bc3cfb-ed51-4405-848c-281cb6185aac",
+      "shot_no": 1,
+      "assets": [
+        {
+          "asset_id": "4487c20f-c763-4159-a450-e036189a043c",
+          "mime": "image/png",
+          "generation_job_id": "74250143-3ff3-4ed3-91d9-1bcaceca3ecd",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "e3263f7d-c00a-4927-baff-1e335141085b",
+          "mime": "video/mp4",
+          "generation_job_id": "769f70e6-234d-435a-951c-eadd4db60356",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "a305a864-460c-4211-b9f1-152e3894fed4",
+          "mime": "audio/wav",
+          "generation_job_id": "e7ccea55-c5e6-4f79-85ef-00404914d519",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        }
+      ]
+    },
+    {
+      "shot_id": "fac5a3b0-4466-44b9-b7ff-a8897a82ce63",
+      "shot_no": 2,
+      "assets": [
+        {
+          "asset_id": "239955a4-d2d2-4213-aed4-9ea6f8eda999",
+          "mime": "image/png",
+          "generation_job_id": "6e605706-f24b-4b3e-a81b-bba7f2e66b47",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "12c9a8e8-1a44-46bc-9fc5-4140a86621ea",
+          "mime": "video/mp4",
+          "generation_job_id": "25fe3b41-9c94-48ee-b177-a7cb2c86df8b",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "7e61a4be-278a-4287-970d-8d75741c8572",
+          "mime": "audio/wav",
+          "generation_job_id": "04eafecb-dfea-4393-860b-1d6ae474efff",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        }
+      ]
+    },
+    {
+      "shot_id": "48b04fe1-e87f-46c7-9669-4e37960cbf24",
+      "shot_no": 3,
+      "assets": [
+        {
+          "asset_id": "e6aa58e9-df65-4fb8-b8da-e1cab5de317d",
+          "mime": "image/png",
+          "generation_job_id": "8ce20453-16d9-429d-ba5d-c32dea1418ff",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "9f78c6b2-3271-40d5-ba85-117941deb3f5",
+          "mime": "video/mp4",
+          "generation_job_id": "7ab3c26d-2c82-4b58-9662-577102b82be0",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "512e2e1e-31f9-42ba-b2c8-01a70b846f9a",
+          "mime": "audio/wav",
+          "generation_job_id": "0aef83e1-8a54-4cc9-b6ce-5419ed61eea1",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        }
+      ]
+    },
+    {
+      "shot_id": "2e4b3d9f-f6c8-40e2-8b3a-3715f136be54",
+      "shot_no": 1,
+      "assets": [
+        {
+          "asset_id": "d47c75bf-4516-4f0a-b5bd-8785b8ee0ff6",
+          "mime": "image/png",
+          "generation_job_id": "eea28b21-01c0-43d3-8ec9-f7d8be21f319",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "52d854cc-9dcf-41e4-8c9c-dcfd5b13975e",
+          "mime": "video/mp4",
+          "generation_job_id": "33d96e53-abd9-4bd4-be28-018213187f37",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "3ce49f44-920a-4f72-8607-b15e90a4b06c",
+          "mime": "audio/wav",
+          "generation_job_id": "c5829651-da3c-44b9-bdbb-597681dfd16c",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        }
+      ]
+    },
+    {
+      "shot_id": "041898ed-e40f-4516-a7a1-8e33c25f7843",
+      "shot_no": 4,
+      "assets": [
+        {
+          "asset_id": "2d64eb6e-d73c-408b-afef-9617ef4464f8",
+          "mime": "image/png",
+          "generation_job_id": "f45a5757-f7e1-4581-bd9c-66a84e7e47f6",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "343919ce-bd9d-484d-a31a-8addc010f601",
+          "mime": "video/mp4",
+          "generation_job_id": "8f8924d5-fa81-4054-b331-16d563b9eb5b",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "df8a2943-de1c-40cc-85c1-2992bfbd4067",
+          "mime": "audio/wav",
+          "generation_job_id": "8a92c98d-0238-42ba-8489-205f4a082129",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        }
+      ]
+    },
+    {
+      "shot_id": "d3c198cf-3f11-4f70-87f2-3b385d2eb31c",
+      "shot_no": 4,
+      "assets": [
+        {
+          "asset_id": "26f4ca62-7e68-477b-82b6-ecf885a79812",
+          "mime": "image/png",
+          "generation_job_id": "9ce5d511-abd5-4379-9dd8-2b7d7402416c",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "13fcc951-4c19-48e2-8a7e-c4c3501a54b3",
+          "mime": "video/mp4",
+          "generation_job_id": "d10d43ce-f5cd-4b32-a8ac-b54011df9e78",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "64146dc7-2053-44bd-9a9a-2b38812ab6d1",
+          "mime": "audio/wav",
+          "generation_job_id": "3e56fe3b-8e73-4bf4-8bd9-625deda92baf",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        }
+      ]
+    },
+    {
+      "shot_id": "dbf2c2d2-cd28-485e-a2a9-1fcf0cbfb06e",
+      "shot_no": 4,
+      "assets": [
+        {
+          "asset_id": "76e585f6-962c-4293-95c4-889ae2f905f4",
+          "mime": "image/png",
+          "generation_job_id": "62e87d28-0873-4e1c-ba1a-90ae7dba3d67",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "a3931aa6-37f4-4f70-b793-58b9f5c4610a",
+          "mime": "video/mp4",
+          "generation_job_id": "8fb41d06-36fd-4545-b40f-4651184fbadd",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "34ef63be-fd47-4979-bf66-d96850735260",
+          "mime": "audio/wav",
+          "generation_job_id": "95644cb6-6f2f-449d-845b-51be0cae091f",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        }
+      ]
+    },
+    {
+      "shot_id": "2feebf97-6ba3-4f7b-aeea-5668794919a0",
+      "shot_no": 2,
+      "assets": [
+        {
+          "asset_id": "80a7ce02-8575-4f0a-8846-11002f8217e6",
+          "mime": "image/png",
+          "generation_job_id": "f969b691-d27e-44a0-b5b6-3db9aebf50dc",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "bf3c277b-02b8-4387-b1f5-4f6f5050720f",
+          "mime": "video/mp4",
+          "generation_job_id": "c3b9cb57-2cba-487f-999b-33b1f5a94e9a",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "8ae7e3c9-d07e-4470-b4ba-9a008f74f7b3",
+          "mime": "audio/wav",
+          "generation_job_id": "0f298abf-32df-497c-9ee0-f1dfc9e11811",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        }
+      ]
+    },
+    {
+      "shot_id": "3cfeb9e0-ecb9-4fde-b7f1-0a445461e8af",
+      "shot_no": 1,
+      "assets": [
+        {
+          "asset_id": "b1e048eb-c7ad-42f6-a46f-9b76e88ec416",
+          "mime": "image/png",
+          "generation_job_id": "5e32de10-d5b8-429d-8224-cd419c0a4930",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "eabdde51-b43a-49cf-b1ad-a9d0a7f7fb66",
+          "mime": "video/mp4",
+          "generation_job_id": "fc5bb528-789b-4cc8-b82c-d86021763f29",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "9df23647-ade6-4af4-8fe9-352f31b0777c",
+          "mime": "audio/wav",
+          "generation_job_id": "7534006a-dccf-4ae8-8180-d9e7741f0d1f",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        }
+      ]
+    },
+    {
+      "shot_id": "81d13bec-53c5-45d4-b180-7a78ca97131d",
+      "shot_no": 3,
+      "assets": [
+        {
+          "asset_id": "a1b326d8-ee9e-47a7-86f1-fa3043be2eee",
+          "mime": "image/png",
+          "generation_job_id": "a5d8a801-0127-4ce3-94f3-46cf251bb9b9",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "3e86b2eb-c180-4e64-ab9d-286d52e295b2",
+          "mime": "video/mp4",
+          "generation_job_id": "e26818d0-aa75-4348-a71e-6ee402ef36ba",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "2d551ebf-1110-4553-ae02-3416f9ca3ea6",
+          "mime": "audio/wav",
+          "generation_job_id": "3981431d-adc8-4d90-90cc-4072736a9399",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        }
+      ]
+    },
+    {
+      "shot_id": "aa41ddee-3385-479a-a2f5-6072bd8b1dc6",
+      "shot_no": 2,
+      "assets": [
+        {
+          "asset_id": "24aa6659-a57d-4745-a51e-debe59049743",
+          "mime": "image/png",
+          "generation_job_id": "d7ee877b-1fae-4118-9c67-92b42cf33533",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "4504899a-fd0d-4cbc-869d-a9b9b7835c12",
+          "mime": "video/mp4",
+          "generation_job_id": "38d51bc9-0451-4d40-870c-6a070a49670a",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        },
+        {
+          "asset_id": "00a3d7c4-d24c-4e9e-960e-5436b1f015fb",
+          "mime": "audio/wav",
+          "generation_job_id": "9a9d0cb9-967b-46d5-8cc5-09c04ecb4c28",
+          "provider": "dashscope",
+          "tool_call_id": null,
+          "agent_run_id": null,
+          "retrieved_sources": []
+        }
+      ]
+    }
+  ],
+  "story_sources": [
+    {
+      "id": "a49673f8-4f8f-4b3f-b4b8-d227f00a3e3b",
+      "title": "黎明信使"
+    }
+  ]
+}

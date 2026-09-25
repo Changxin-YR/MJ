@@ -1,0 +1,90 @@
+{
+  "started_at": "2026-09-23T01:45:09.431669+00:00",
+  "provider": "dashscope",
+  "steps": {
+    "rag_sources": 1,
+    "director": {
+      "status": "COMPLETED",
+      "sources": 1
+    },
+    "image": {
+      "job_id": "34befada-3ceb-4088-b650-67083d156b8c",
+      "status": "SUCCEEDED",
+      "model": "wan2.6-t2i",
+      "retry_count": 0,
+      "inspection": {
+        "model": "qwen3-vl-plus",
+        "score": 0.95,
+        "checks": {
+          "costume": "PASS",
+          "dialogue": "UNVERIFIED",
+          "subtitle": "UNVERIFIED",
+          "visual_defect": "PASS",
+          "character_count": "UNVERIFIED",
+          "story_deviation": "UNVERIFIED",
+          "scene_continuity": "UNVERIFIED",
+          "style_consistency": "PASS",
+          "character_consistency": "PASS"
+        },
+        "issues": [],
+        "method": "QWEN_VL",
+        "status": "PASS"
+      }
+    },
+    "video": {
+      "job_id": "98a72c5c-d78d-4c46-9804-d65aef99c5c6",
+      "status": "SUCCEEDED",
+      "model": "wan2.6-i2v-flash",
+      "retry_count": 0,
+      "inspection": {
+        "model": "qwen3-vl-plus",
+        "score": 0.95,
+        "checks": {
+          "costume": "PASS",
+          "dialogue": "UNVERIFIED",
+          "subtitle": "UNVERIFIED",
+          "visual_defect": "PASS",
+          "character_count": "UNVERIFIED",
+          "story_deviation": "UNVERIFIED",
+          "scene_continuity": "UNVERIFIED",
+          "style_consistency": "PASS",
+          "character_consistency": "PASS"
+        },
+        "issues": [],
+        "method": "QWEN_VL",
+        "status": "PASS"
+      }
+    },
+    "voice": {
+      "job_id": "198ebc61-3e67-43c8-8949-873ae367b7bd",
+      "status": "SUCCEEDED",
+      "model": "qwen3-tts-flash",
+      "retry_count": 0,
+      "inspection": {
+        "score": 0.0,
+        "checks": {
+          "costume": "UNVERIFIED",
+          "dialogue": "UNVERIFIED",
+          "subtitle": "UNVERIFIED",
+          "visual_defect": "UNVERIFIED",
+          "character_count": "UNVERIFIED",
+          "story_deviation": "UNVERIFIED",
+          "scene_continuity": "UNVERIFIED",
+          "style_consistency": "UNVERIFIED",
+          "character_consistency": "UNVERIFIED"
+        },
+        "issues": [
+          "Voice content requires listening during human review"
+        ],
+        "method": "TECHNICAL_ONLY",
+        "status": "PASS"
+      }
+    },
+    "assets": 3,
+    "audit_events": 17
+  },
+  "project_id": "06cf9f61-3eeb-452b-8513-9582f8f8aed2",
+  "shot_id": "18e346da-ef28-4b9c-a92f-3f9e4ee4fde3",
+  "status": "PASS",
+  "finished_at": "2026-09-23T01:46:19.542405+00:00"
+}

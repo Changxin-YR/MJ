@@ -1,0 +1,89 @@
+name: frameforge
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-frameforge}
+      MYSQL_USER: ${MYSQL_USER:-frameforge}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-root-password}
+    ports: ["127.0.0.1:23306:3306"]
+    volumes: [mysql_data:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      retries: 30
+  redis:
+    image: redis/redis-stack-server@sha256:798ab84d9f266936b034ab11c4d04a2b8e4b441884c5aa7d17ac951eefdf742a
+    ports: ["127.0.0.1:26379:6379"]
+    volumes: [redis_data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+  qdrant:
+    image: qdrant/qdrant:v1.15.3
+    ports: ["127.0.0.1:26333:6333"]
+    volumes: [qdrant_data:/qdrant/storage]
+  minio:
+    image: bitnamilegacy/minio:2025.7.23-debian-12-r5
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-frameforge}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-change-minio-secret}
+    ports: ["127.0.0.1:29000:9000", "127.0.0.1:29001:9001"]
+    volumes: [minio_data:/bitnami/minio/data]
+  comfyui:
+    profiles: ["comfyui"]
+    build:
+      context: .local/comfyui-source
+      dockerfile: ../../ops/comfyui/Dockerfile
+    gpus: all
+    shm_size: "1gb"
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - ${COMFYUI_MODELS_PATH:-./.local/comfyui-models/checkpoints}:/opt/ComfyUI/models/checkpoints:ro
+      - comfyui_output:/opt/ComfyUI/output
+      - comfyui_user:/opt/ComfyUI/user
+      - comfyui_temp:/opt/ComfyUI/temp
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8188/system_stats', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+  api:
+    build: ./backend
+    env_file: .env
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports: ["127.0.0.1:28081:8000"]
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      qdrant: {condition: service_started}
+      minio: {condition: service_started}
+  worker:
+    build: ./backend
+    env_file: .env
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+  dispatcher:
+    build: ./backend
+    env_file: .env
+    command: ["python", "-m", "app.workers.dispatcher"]
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+  frontend:
+    build: ./frontend
+    ports: ["127.0.0.1:28080:80"]
+    depends_on: [api]
+volumes:
+  mysql_data:
+  redis_data:
+  qdrant_data:
+  minio_data:
+  comfyui_output:
+  comfyui_user:
+  comfyui_temp:
