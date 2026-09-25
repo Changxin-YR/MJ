@@ -38,6 +38,22 @@ def test_render_approved_timeline_to_playable_mp4():
     assert len(timeline["items"]) == 3
     with SessionLocal() as db:
         current = db.get(Shot, shot["id"])
+        current.inspection_json = {
+            "status": "FAIL",
+            "issues": ["Japanese text appeared later in the video"],
+            "checks": {"visible_text_language": "FAIL"},
+            "review_override": {
+                "actor_id": "legacy-reviewer",
+                "reason": "legacy override must no longer bypass language policy",
+                "video_asset_id": current.current_video_asset_id,
+                "reviewed_at": "2026-09-25T00:00:00",
+            },
+        }
+        db.commit()
+    code, body = call(client, "POST", f"{prefix}/timelines/{timeline['id']}/render", token, json={"expected_version": timeline["version"]})
+    assert code == 409 and body["error"]["code"] == "RESOURCE_CONFLICT"
+    with SessionLocal() as db:
+        current = db.get(Shot, shot["id"])
         current.inspection_json = {"status": "FAIL", "issues": ["Recheck found a mismatch"]}
         db.commit()
     code, body = call(client, "POST", f"{prefix}/timelines/{timeline['id']}/sync", token, json={"expected_version": timeline["version"]})
