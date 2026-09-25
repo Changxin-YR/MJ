@@ -85,6 +85,15 @@ def plan(state: DirectorState):
                     }
                     for character in state["project_context"].get("characters", [])[:30]
                 ],
+                "project_bible": [
+                    {
+                        "title": item["title"],
+                        "content": item["content"][:1500],
+                        "version": item["version"],
+                    }
+                    for item in state["project_context"].get("bibles", [])[:20]
+                ],
+                "character_relationships": state["project_context"].get("relationships", [])[:50],
                 "retrieved_sources": [
                     {
                         "text": source["text"][:1800],
