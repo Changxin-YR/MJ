@@ -161,8 +161,9 @@ def _payload_tokens(text: str, limit: int = 512) -> list[str]:
 def _query_terms(query: str, limit: int = 40) -> list[str]:
     raw_terms = _payload_tokens(query, limit=limit * 2)
     terms = [term for term in raw_terms if term not in QUERY_STOP_TOKENS][:limit]
-    # Preserve short Chinese character names such as 顾七 even if longer query terms exist.
-    named = re.findall(r"(?:^|[，。！？；、\s])([\u4e00-\u9fff]{2,4})(?=问|说|答|道|回应|回答)", query)
+    # Query entity extraction follows the same conservative explicit-speaker rules
+    # as indexed fiction. Generic phrases such as “对方怎么回答” are intent, not names.
+    named = _speaker_hints(query)
     for name in reversed(named):
         if name not in terms:
             terms.insert(0, name)
