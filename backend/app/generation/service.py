@@ -1,4 +1,5 @@
 import random
+import re
 from datetime import timedelta
 from decimal import Decimal
 
@@ -17,6 +18,8 @@ IMAGE_CHINESE_TEXT_RULE = (
     "只能使用简体中文；禁止日文假名、韩文谚文、繁体中文和其他外语文字；"
     "如果文字不是剧情必需，则不要生成任何文字。"
 )
+FOREIGN_ASIAN_SCRIPT = re.compile(r"[\u3040-\u30ff\u31f0-\u31ff\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]")
+
 IMAGE_NON_CHINESE_TEXT_NEGATIVE = (
     "日文，日语文字，平假名，片假名，韩文，韩语文字，谚文，繁体中文，"
     "英文文字，乱码，伪文字，错误字符"
@@ -135,6 +138,8 @@ def request_generation(db: Session, scope: ProjectScope, shot_id: str, kind: str
         raise APIError("RESOURCE_CONFLICT", "Generate image first", 409)
     if kind == "VOICE" and not shot.dialogue.strip():
         raise APIError("INVALID_PARAMETER", "Dialogue required for voice", 422)
+    if kind == "VOICE" and FOREIGN_ASIAN_SCRIPT.search(shot.dialogue):
+        raise APIError("INVALID_PARAMETER", "Voice dialogue must not contain Japanese or Korean script", 422)
     entry = registry.route(kind)
     estimate = Decimal(str(entry.cost[kind])) * (Decimal(str(shot.duration)) if kind == "VIDEO" else Decimal(1))
     reserve(db, project, estimate)
