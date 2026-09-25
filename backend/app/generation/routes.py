@@ -15,7 +15,14 @@ from app.auth.dependencies import ProjectScope, project_scope, require
 from app.config import settings
 from app.db import SessionLocal, get_db
 from app.generation.service import job_data, request_generation
-from app.models import GenerationJob, ProjectMember, ServerSession, User, WorkspaceMember, now
+from app.models import (
+    GenerationJob,
+    ProjectMember,
+    ServerSession,
+    User,
+    WorkspaceMember,
+    now,
+)
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["generation"])
 
