@@ -11,7 +11,9 @@ from app.models import KnowledgeDocument, KnowledgeVersion, StorySource
 from app.providers.embeddings import lexical_tokens, selected_embedding_provider
 
 DIALOGUE_START_RE = re.compile(r'^\s*(?:[“「『"‘]|[\u4e00-\u9fffA-Za-z0-9_·]{1,12}[：:])')
-SENTENCE_SPLIT_RE = re.compile(r'(?<=[。！？!?；;])')
+SENTENCE_SPLIT_RE = re.compile(
+    r'(?<=[。！？!?；;])(?=[^”」』"’]|$)|(?<=[”」』"’])(?=[\u4e00-\u9fffA-Za-z“「『"‘])'
+)
 DIALOGUE_QUERY_CUES = (
     "说", "问", "回答", "答道", "对白", "对话", "谁说", "这句话", "接着", "随后", "然后呢",
     "他说", "她说", "回应", "回了", "接话", "上一句", "下一句", "后一句", "前一句",
@@ -73,7 +75,7 @@ def _split_cn_units(text: str, max_unit_chars: int = 360) -> list[str]:
         line = raw_line.strip()
         if not line:
             continue
-        if len(line) <= max_unit_chars and DIALOGUE_START_RE.match(line):
+        if len(line) <= max_unit_chars and _is_dialogue(line):
             units.append(line)
             continue
         parts = [part.strip() for part in SENTENCE_SPLIT_RE.split(line) if part.strip()] or [line]
