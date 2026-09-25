@@ -1,4 +1,5 @@
 import io
+import wave
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -79,3 +80,37 @@ def test_finalize_stays_successful_when_quarantine_cleanup_fails(monkeypatch):
     monkeypatch.setattr(asset_routes, "client", lambda: CleanupFailure())
     code, body = call(client, "POST", prefix + f"/uploads/{asset_id}/finalize", owner)
     assert code == 200 and body["data"]["status"] == "READY"
+
+
+
+def test_direct_wav_upload_is_validated_and_ready():
+    client = TestClient(app)
+    _, owner = register(client, "upload-direct-wav")
+    _, body = call(client, "POST", "/api/v1/workspaces", owner, json={"name": "Direct Audio"})
+    workspace_id = body["data"]["id"]
+    _, body = call(client, "POST", f"/api/v1/workspaces/{workspace_id}/projects", owner, json={"name": "Audio Assets"})
+    prefix = f"/api/v1/projects/{body['data']['id']}/assets"
+
+    output = io.BytesIO()
+    with wave.open(output, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(22050)
+        wav.writeframes(b"\x00\x00" * 2205)
+    audio = output.getvalue()
+
+    response = client.post(
+        prefix + "/uploads/direct",
+        headers={"Authorization": f"Bearer {owner}"},
+        files={"file": ("music.wav", audio, "audio/wav")},
+    )
+    assert response.status_code == 200, response.text
+    asset = response.json()["data"]
+    assert asset["status"] == "READY"
+    assert asset["mime"] == "audio/wav"
+    assert 0.09 <= asset["duration"] <= 0.11
+    stored = client.get(
+        prefix + f"/{asset['id']}/content",
+        headers={"Authorization": f"Bearer {owner}"},
+    )
+    assert stored.status_code == 200 and stored.content == audio
