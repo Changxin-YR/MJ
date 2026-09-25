@@ -278,3 +278,47 @@ def test_project_character_names_help_identify_action_prefixed_speaker():
     dialogue = [record for record in records if record["chunk_kind"] == "dialogue"]
     assert dialogue
     assert any("顾七" in record.get("speaker_hints", []) for record in dialogue)
+
+
+
+def test_dialogue_query_detection_does_not_bias_plain_narrative_questions():
+    assert rag_service._is_dialogue_query("顾七问完之后，对方怎么回答？") is True
+    assert rag_service._is_dialogue_query("为什么项目预算会超出上限？") is False
+    assert rag_service._is_dialogue_query("随后发生了什么事情？") is False
+
+
+def test_neighbor_expansion_does_not_merge_separate_dialogue_runs():
+    client = TestClient(app)
+    _, token = register(client, "rag-dialogue-run-boundary")
+    _, body = call(client, "POST", "/api/v1/workspaces", token, json={"name": "对白轮次隔离"})
+    workspace = body["data"]["id"]
+    _, body = call(client, "POST", f"/api/v1/workspaces/{workspace}/projects", token, json={"name": "轮次隔离项目"})
+    prefix = f"/api/v1/projects/{body['data']['id']}"
+    story = """顾七问：“石门后的钥匙还在吗？”
+“还在第三块砖下。”
+“你亲眼看见的？”
+“是。”
+两人离开石门，沿山道走了很久。
+天色完全暗下来。
+他们在药园外停下，换了一个话题。
+许棠问：“黄芽参明天还要浇水吗？”
+“要，卯时之前。”
+“用井水？”
+“用山泉。”"""
+    code, body = call(client, "POST", f"{prefix}/stories", token, json={"title": "两轮对白", "content": story})
+    assert code == 200, body
+    story_id = body["data"]["id"]
+    code, body = call(client, "POST", f"{prefix}/knowledge/stories/{story_id}/index", token)
+    assert code == 200, body
+    code, body = call(
+        client,
+        "POST",
+        f"{prefix}/knowledge/search",
+        token,
+        json={"query": "顾七问钥匙还在不在，对方怎么回答？", "limit": 1},
+    )
+    assert code == 200 and body["data"], body
+    result = body["data"][0]
+    assert result["chunk_kind"] == "dialogue"
+    assert "第三块砖下" in result["text"]
+    assert "黄芽参" not in result["text"]
