@@ -193,7 +193,7 @@ def process_generation(job_id: str):
             with SessionLocal() as db:
                 shot = db.get(Shot, job.resource_id)
                 db.expunge(shot)
-            inspection = inspect_media(shot, result, job.provider)
+            inspection = inspect_media(shot, result, job.provider, job.input_json.get("prompt", ""))
             complete_job(job_id, owner, result, inspection)
     except Exception as error:
         fail_job(job_id, owner, error)
