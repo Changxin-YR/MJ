@@ -10,7 +10,7 @@ from app.config import settings
 from app.models import KnowledgeDocument, KnowledgeVersion, StorySource
 from app.providers.embeddings import lexical_tokens, selected_embedding_provider
 
-DIALOGUE_START_RE = re.compile(r'^\\s*(?:[“「『"‘]|[\\u4e00-\\u9fffA-Za-z0-9_·]{1,12}[：:])')
+DIALOGUE_START_RE = re.compile(r'^\s*(?:[“「『"‘]|[\u4e00-\u9fffA-Za-z0-9_·]{1,12}[：:])')
 SENTENCE_SPLIT_RE = re.compile(r'(?<=[。！？!?；;])')
 DIALOGUE_QUERY_CUES = ("说", "问", "回答", "答道", "对白", "对话", "谁说", "这句话", "接着", "随后", "然后呢")
 
@@ -42,9 +42,9 @@ def ensure_collection(q: QdrantClient, name: str, dimensions: int) -> None:
 
 
 def _split_cn_units(text: str, max_unit_chars: int = 360) -> list[str]:
-    normalized = text.replace("\\r\\n", "\\n").replace("\\r", "\\n")
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
     units: list[str] = []
-    for raw_line in normalized.split("\\n"):
+    for raw_line in normalized.split("\n"):
         line = raw_line.strip()
         if not line:
             continue
@@ -96,7 +96,7 @@ def _pack_units(
             chunk_end += 1
         if chunk_end == chunk_start:
             chunk_end += 1
-        core_text = "\\n".join(units[chunk_start:chunk_end]).strip()
+        core_text = "\n".join(units[chunk_start:chunk_end]).strip()
         if core_text:
             records.append(
                 {
@@ -169,7 +169,7 @@ def build_chunk_records(text: str) -> list[dict]:
         context_radius = 2 if record["chunk_kind"] == "dialogue" else 1
         context_start = max(0, record["unit_start"] - context_radius)
         context_end = min(len(units), record["unit_end"] + context_radius + 1)
-        context_text = "\\n".join(units[context_start:context_end]).strip()
+        context_text = "\n".join(units[context_start:context_end]).strip()
         dialogue_units = sum(_is_dialogue(unit) for unit in units[record["unit_start"]:record["unit_end"] + 1])
         total_units = max(1, record["unit_end"] - record["unit_start"] + 1)
         deduplicated.append(
@@ -313,7 +313,7 @@ def retrieve(*, workspace_id: str, project_id: str, query: str, limit: int = 5) 
         with_payload=True,
     )
     dialogue_query = any(cue in query for cue in DIALOGUE_QUERY_CUES)
-    query_compact = re.sub(r"\\s+", "", query)
+    query_compact = re.sub(r"\s+", "", query)
 
     ranked: list[dict] = []
     seen: set[tuple[str, str]] = set()
@@ -327,7 +327,7 @@ def retrieve(*, workspace_id: str, project_id: str, query: str, limit: int = 5) 
             continue
         seen.add(key)
         lexical = _lexical_overlap(query, context_text)
-        exact_boost = 0.12 if len(query_compact) >= 2 and query_compact in re.sub(r"\\s+", "", context_text) else 0.0
+        exact_boost = 0.12 if len(query_compact) >= 2 and query_compact in re.sub(r"\s+", "", context_text) else 0.0
         dialogue_boost = 0.06 if dialogue_query and payload.get("chunk_kind") == "dialogue" else 0.0
         rerank_score = float(point.score) + 0.10 * lexical + exact_boost + dialogue_boost
         ranked.append(
