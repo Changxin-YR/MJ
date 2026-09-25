@@ -191,8 +191,8 @@ def build_chunk_records(text: str, known_speakers: list[str] | None = None) -> l
                 units,
                 start=run_start,
                 end=run_end,
-                target_chars=520,
-                overlap_units=4,
+                target_chars=420,
+                overlap_units=6,
                 chunk_kind="dialogue",
             )
             anchor_end = min(run_end, run_start + 3)
