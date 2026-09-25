@@ -7,7 +7,8 @@ from app.api.errors import APIError, ok, trace_id
 from app.audit.service import record
 from app.auth.dependencies import ProjectScope, project_scope, require, scoped_get
 from app.db import get_db
-from app.models import Character, CharacterVersion, Episode, Scene, Shot, now
+from app.generation.service import apply_chinese_image_policy, build_generation_prompt
+from app.models import Character, Episode, Scene, Shot, now
 from app.storyboard.state import transition_shot
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["storyboard"])
@@ -182,6 +183,8 @@ def edit_shot(shot_id: str, payload: ShotEdit, request: Request, scope: ProjectS
         raise APIError("RESOURCE_NOT_FOUND", "Shot not found", 404)
     if shot.status == "LOCKED":
         raise APIError("SHOT_LOCKED", "Shot is locked", 409)
+    if shot.status in {"GENERATING", "GENERATED", "INSPECTING"}:
+        raise APIError("RESOURCE_CONFLICT", "Shot cannot be edited while generation or inspection is active", 409)
     if shot.version != payload.expected_version:
         raise APIError("RESOURCE_VERSION_CONFLICT", "Shot changed", 409)
     updates = payload.model_dump(exclude_unset=True, exclude={"expected_version"})
@@ -189,8 +192,32 @@ def edit_shot(shot_id: str, payload: ShotEdit, request: Request, scope: ProjectS
         validate_character_ids(db, scope, updates["character_ids"])
     for key, value in updates.items():
         setattr(shot, key, value)
+    invalidated = bool(updates) and (
+        shot.current_image_asset_id
+        or shot.current_video_asset_id
+        or shot.current_audio_asset_id
+        or shot.inspection_json
+        or shot.status not in {"DRAFT", "PLANNED"}
+    )
+    if invalidated:
+        shot.current_image_asset_id = None
+        shot.current_video_asset_id = None
+        shot.current_audio_asset_id = None
+        shot.inspection_json = None
+        shot.status = "PLANNED"
     shot.version += 1
-    record(db, actor_type="USER", actor_id=scope.user_id, action="shot.edit", resource_type="shot", resource_id=shot.id, workspace_id=scope.workspace_id, project_id=scope.project_id, trace_id=trace_id(request))
+    record(
+        db,
+        actor_type="USER",
+        actor_id=scope.user_id,
+        action="shot.edit",
+        resource_type="shot",
+        resource_id=shot.id,
+        workspace_id=scope.workspace_id,
+        project_id=scope.project_id,
+        trace_id=trace_id(request),
+        safe_summary="derived media invalidated" if invalidated else "",
+    )
     db.commit()
     return ok(request, shot_data(shot))
 
@@ -255,11 +282,6 @@ def reorder(shot_id: str, payload: Reorder, request: Request, scope: ProjectScop
 def built_prompt(shot_id: str, request: Request, scope: ProjectScope = Depends(project_scope), db: Session = Depends(get_db)):
     require(scope, "project.read")
     shot = scoped_get(db, Shot, shot_id, scope)
-    anchors, negatives = [], []
-    for cid in shot.character_ids:
-        c = scoped_get(db, Character, cid, scope)
-        if c.active_version_id:
-            v = scoped_get(db, CharacterVersion, c.active_version_id, scope)
-            anchors.append(f"{c.name}: {v.dna.get('prompt_anchor', '')}; face {v.dna.get('face', '')}; hair {v.dna.get('hair', '')}; costume {v.dna.get('costume', '')}; style {v.dna.get('style', '')}")
-            negatives.append(v.dna.get("negative_prompt", ""))
-    return ok(request, {"prompt": ". ".join(filter(None, [shot.description, shot.action, shot.prompt, *anchors])), "negative_prompt": ", ".join(filter(None, [shot.negative_prompt, *negatives]))})
+    prompt, negative_prompt = build_generation_prompt(db, scope, shot)
+    prompt, negative_prompt = apply_chinese_image_policy(prompt, negative_prompt)
+    return ok(request, {"prompt": prompt, "negative_prompt": negative_prompt})
