@@ -37,6 +37,8 @@ def timeline_data(db: Session, timeline: Timeline) -> dict:
 
 def reviewed_video(shot: Shot, asset_id: str) -> bool:
     inspection = shot.inspection_json or {}
+    if (inspection.get("checks") or {}).get("visible_text_language") == "FAIL":
+        return False
     override = inspection.get("review_override") or {}
     return shot.status in {"APPROVED", "LOCKED"} and shot.current_video_asset_id == asset_id and (
         inspection.get("status") == "PASS" or (
