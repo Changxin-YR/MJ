@@ -218,6 +218,7 @@ def sync_timeline(timeline_id: str, payload: VersionPayload, request: Request, s
         elapsed += shot.duration
     timeline.version += 1
     timeline.status = "READY"
+    timeline.final_asset_id = None
     record(db, actor_type="USER", actor_id=scope.user_id, action="timeline.sync", resource_type="timeline", resource_id=timeline.id, workspace_id=scope.workspace_id, project_id=scope.project_id, trace_id=trace_id(request), safe_summary=f"{len(shots)} approved shots")
     db.commit()
     return ok(request, timeline_data(db, timeline))
