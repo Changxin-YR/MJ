@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ok, trace_id
@@ -68,7 +69,20 @@ def create_timeline(episode_id: str, request: Request, scope: ProjectScope = Dep
     for order_no, kind in enumerate(TRACK_KINDS):
         db.add(TimelineTrack(workspace_id=scope.workspace_id, project_id=scope.project_id, timeline_id=timeline.id, kind=kind, order_no=order_no))
     record(db, actor_type="USER", actor_id=scope.user_id, action="timeline.create", resource_type="timeline", resource_id=timeline.id, workspace_id=scope.workspace_id, project_id=scope.project_id, trace_id=trace_id(request))
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = db.scalar(
+            select(Timeline).where(
+                Timeline.workspace_id == scope.workspace_id,
+                Timeline.project_id == scope.project_id,
+                Timeline.episode_id == episode_id,
+            )
+        )
+        if existing:
+            return ok(request, timeline_data(db, existing))
+        raise
     return ok(request, timeline_data(db, timeline))
 
 
