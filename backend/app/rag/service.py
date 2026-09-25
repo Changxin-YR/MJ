@@ -91,14 +91,26 @@ def _is_dialogue(unit: str) -> bool:
 def _speaker_hints(text: str) -> list[str]:
     hints: list[str] = []
     for line in text.splitlines():
-        for pattern in (SPEAKER_PREFIX_RE, SPEAKER_COLON_RE, SPEAKER_SUFFIX_RE):
+        for pattern in (SPEAKER_PREFIX_RE, SPEAKER_SUFFIX_RE, SPEAKER_COLON_RE):
             match = pattern.search(line)
             if not match:
                 continue
             speaker = match.group(1).strip()
             if speaker and speaker not in SPEAKER_STOP and speaker not in hints:
                 hints.append(speaker)
+            break
     return hints[:12]
+
+
+def _speaker_anchor_lines(units: list[str], start: int, end: int, focus: int, limit: int = 6) -> list[str]:
+    candidates: list[tuple[int, int, str]] = []
+    for index in range(max(0, start), min(len(units), end)):
+        line = units[index]
+        if not _speaker_hints(line):
+            continue
+        candidates.append((abs(index - focus), index, line))
+    nearest = sorted(candidates)[:limit]
+    return [line for _, _, line in sorted(nearest, key=lambda item: item[1])]
 
 
 def _window_text(units: list[str], start: int, end: int, target_chars: int) -> tuple[int, int, str]:
@@ -126,7 +138,8 @@ def _payload_tokens(text: str, limit: int = 512) -> list[str]:
     result: list[str] = []
     # 3-grams first give Chinese names/phrases more discriminative lexical recall.
     tokens = lexical_tokens(text)
-    for token in sorted(tokens, key=lambda value: (-len(value), tokens.index(value))):
+    ordered = sorted(enumerate(tokens), key=lambda item: (-len(item[1]), item[0]))
+    for _, token in ordered:
         if token in seen:
             continue
         seen.add(token)
@@ -245,26 +258,38 @@ def build_chunk_records(text: str) -> list[dict]:
             continue
         seen.add(key)
         if record["chunk_kind"] == "dialogue":
-            parent_start = int(record.get("dialogue_run_start", record["unit_start"]))
-            parent_end = int(record.get("dialogue_run_end", record["unit_end"] + 1))
-            parent_start, parent_end, context_text = _window_text(units, parent_start, parent_end, 1800)
+            run_start = int(record.get("dialogue_run_start", record["unit_start"]))
+            run_end = int(record.get("dialogue_run_end", record["unit_end"] + 1))
+            parent_start, parent_end, context_text = _window_text(
+                units, record["unit_start"], record["unit_end"] + 1, 1650
+            )
+            run_text = "\n".join(units[run_start:run_end])
+            speaker_hints = _speaker_hints(run_text)
+            speaker_anchors = _speaker_anchor_lines(
+                units, run_start, run_end, record["unit_start"], limit=6
+            )
         else:
             parent_start, parent_end, context_text = _window_text(
-                units, record["unit_start"], record["unit_end"] + 1, 1200
+                units, record["unit_start"], record["unit_end"] + 1, 1150
+            )
+            speaker_hints = _speaker_hints(context_text)
+            speaker_anchors = _speaker_anchor_lines(
+                units, parent_start, parent_end, record["unit_start"], limit=4
             )
         dialogue_units = sum(_is_dialogue(unit) for unit in units[record["unit_start"]:record["unit_end"] + 1])
         total_units = max(1, record["unit_end"] - record["unit_start"] + 1)
-        speaker_hints = _speaker_hints(context_text)
+        lexical_source = "\n".join([context_text, *speaker_anchors])
         deduplicated.append(
             {
                 **record,
                 "parent_start": parent_start,
                 "parent_end": parent_end - 1,
                 "text": context_text,
-                "embedding_text": f"{record['core_text']}\n\n上下文：\n{context_text}"[:2600],
+                "embedding_text": f"{record['core_text']}\n\n上下文：\n{context_text}\n\n明确说话人线索：\n" + "\n".join(speaker_anchors),
                 "dialogue_ratio": dialogue_units / total_units,
                 "speaker_hints": speaker_hints,
-                "lexical_tokens": _payload_tokens(context_text),
+                "speaker_anchors": speaker_anchors,
+                "lexical_tokens": _payload_tokens(lexical_source),
             }
         )
     for index, record in enumerate(deduplicated):
@@ -365,6 +390,7 @@ def index_story(db: Session, story: StorySource) -> KnowledgeDocument:
                 "core_text": record["core_text"],
                 "text": record["text"],
                 "speaker_hints": record["speaker_hints"],
+                "speaker_anchors": record["speaker_anchors"],
                 "lexical_tokens": record["lexical_tokens"],
                 "parent_start": record["parent_start"],
                 "parent_end": record["parent_end"],
