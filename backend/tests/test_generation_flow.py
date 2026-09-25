@@ -157,6 +157,10 @@ def test_generation_job_uses_active_character_dna_in_real_prompt():
     code, body = call(client, "PATCH", f"{prefix}/shots/{shot['id']}", token, json={"expected_version": shot["version"], "character_ids": [character["id"]]})
     assert code == 200, body
     shot = body["data"]
+    assert shot["status"] == "PLANNED"
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/transition", token, json={"expected_version": shot["version"], "target": "STORYBOARD_READY"})
+    assert code == 200, body
+    shot = body["data"]
     code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": "IMAGE", "idempotency_key": str(uuid4())})
     assert code == 200, body
     with SessionLocal() as db:
