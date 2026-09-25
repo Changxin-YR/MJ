@@ -79,6 +79,11 @@ def test_dashscope_disables_prompt_rewrite_and_forces_chinese_tts(monkeypatch):
     assert "简体中文招牌" in image_payload["input"]["messages"][0]["content"][0]["text"]
 
     with pytest.raises(CapturedPayload):
+        dashscope.DashScopeVideoProvider().submit(b"image", 3, "只允许简体中文可见文字")
+    video_payload = captured[-1]["payload"]
+    assert video_payload["parameters"]["prompt_extend"] is False
+
+    with pytest.raises(CapturedPayload):
         dashscope.DashScopeTTSProvider().synthesize("城市醒来了。", 2)
     tts_payload = captured[-1]["payload"]
     assert tts_payload["input"]["language_type"] == "Chinese"
