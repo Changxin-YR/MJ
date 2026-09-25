@@ -248,37 +248,45 @@ def index_story(db: Session, story: StorySource) -> KnowledgeDocument:
     ensure_collection(q, name, provider.dimensions)
     records = build_chunk_records(story.content)
 
-    q.delete(
+    points = [
+        models.PointStruct(
+            id=str(uuid5(NAMESPACE_URL, f"{name}:{version.id}:{record['chunk_kind']}:{record['chunk_index']}")),
+            vector=provider.embed(record["embedding_text"]),
+            payload={
+                "workspace_id": story.workspace_id,
+                "project_id": story.project_id,
+                "document_id": document.id,
+                "version_id": version.id,
+                "source_type": "story",
+                "source_id": story.id,
+                "status": "ACTIVE",
+                "chunk_kind": record["chunk_kind"],
+                "chunk_index": record["chunk_index"],
+                "unit_start": record["unit_start"],
+                "unit_end": record["unit_end"],
+                "dialogue_ratio": record["dialogue_ratio"],
+                "core_text": record["core_text"],
+                "text": record["text"],
+            },
+        )
+        for record in records
+    ]
+    existing, _ = q.scroll(
         collection_name=name,
-        points_selector=models.FilterSelector(filter=_version_filter(version.id)),
-        wait=True,
+        scroll_filter=_version_filter(version.id),
+        limit=10_000,
+        with_payload=False,
+        with_vectors=False,
     )
-    if records:
-        q.upsert(
-            name,
-            points=[
-                models.PointStruct(
-                    id=str(uuid5(NAMESPACE_URL, f"{name}:{version.id}:{record['chunk_kind']}:{record['chunk_index']}")),
-                    vector=provider.embed(record["embedding_text"]),
-                    payload={
-                        "workspace_id": story.workspace_id,
-                        "project_id": story.project_id,
-                        "document_id": document.id,
-                        "version_id": version.id,
-                        "source_type": "story",
-                        "source_id": story.id,
-                        "status": "ACTIVE",
-                        "chunk_kind": record["chunk_kind"],
-                        "chunk_index": record["chunk_index"],
-                        "unit_start": record["unit_start"],
-                        "unit_end": record["unit_end"],
-                        "dialogue_ratio": record["dialogue_ratio"],
-                        "core_text": record["core_text"],
-                        "text": record["text"],
-                    },
-                )
-                for record in records
-            ],
+    existing_ids = {point.id for point in existing}
+    new_ids = {point.id for point in points}
+    if points:
+        q.upsert(name, points=points, wait=True)
+    stale_ids = list(existing_ids - new_ids)
+    if stale_ids:
+        q.delete(
+            collection_name=name,
+            points_selector=models.PointIdsList(points=stale_ids),
             wait=True,
         )
     return document
