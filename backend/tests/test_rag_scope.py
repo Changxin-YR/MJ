@@ -254,3 +254,16 @@ def test_long_dialogue_retrieval_expands_adjacent_context_across_chunk_boundary(
     assert best["chunk_kind"] == "dialogue"
     assert "顾七" in best.get("speaker_hints", [])
     assert best.get("context_expanded") is True
+
+
+
+def test_project_character_names_help_identify_action_prefixed_speaker():
+    story = """沈青衡没有回答。
+顾七盯着他：“你是不是早就知道？”
+“只是猜到一点。”
+顾七把灯提得更高：“那现在呢？”
+“现在可以确定了。”"""
+    records = build_chunk_records(story, known_speakers=["沈青衡", "顾七"])
+    dialogue = [record for record in records if record["chunk_kind"] == "dialogue"]
+    assert dialogue
+    assert any("顾七" in record.get("speaker_hints", []) for record in dialogue)
