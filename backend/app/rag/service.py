@@ -40,7 +40,8 @@ QUERY_STOP_TOKENS = set(
 
 
 def collection_name(provider) -> str:
-    digest = hashlib.sha256(provider.model.encode()).hexdigest()[:10]
+    identity = f"{provider.model}:{getattr(provider, 'profile', 'legacy')}"
+    digest = hashlib.sha256(identity.encode()).hexdigest()[:10]
     return f"frameforge_knowledge_{provider.dimensions}_{digest}"
 
 
