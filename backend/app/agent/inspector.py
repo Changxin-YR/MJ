@@ -16,7 +16,7 @@ from app.providers.base import MediaResult
 
 CHECKS = (
     "character_consistency", "costume", "scene_continuity", "character_count",
-    "dialogue", "subtitle", "visual_defect", "story_deviation", "style_consistency",
+    "dialogue", "subtitle", "visible_text_language", "visual_defect", "story_deviation", "style_consistency",
 )
 
 
@@ -55,6 +55,8 @@ def _visual_inspection(shot: Shot, frame: bytes) -> dict:
         "issues as an array of short strings, and checks as an object. Checks must contain these exact keys: "
         + ", ".join(CHECKS) + ". Each check value is PASS, FAIL, or UNVERIFIED. "
         "Mark dialogue, subtitle and scene_continuity UNVERIFIED for a single still. "
+        "For visible_text_language: PASS if there is no readable text, or every readable word/sign/subtitle is Simplified Chinese with only Arabic numerals and normal punctuation allowed. "
+        "FAIL if any readable Japanese kana, Korean Hangul, English word, Latin-letter signage, mixed foreign-language text, or gibberish is visible. "
         "Story deviation can be judged only for facts directly visible in this shot. "
         "A null character_count_expected means no count was specified; mark character_count UNVERIFIED. "
         "Do not invent continuity, story or dialogue evidence. Judge only material, directly visible contradictions. "
