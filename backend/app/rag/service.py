@@ -19,9 +19,10 @@ EXPLICIT_SPEAKER_RE = re.compile(
 SENTENCE_SPLIT_RE = re.compile(r'(?<=[。！？!?；;])')
 DIALOGUE_QUERY_CUES = (
     "说", "问", "回答", "答道", "对白", "对话", "谁说", "谁问", "这句话", "这句",
-    "上一句", "下一句", "对方", "回应", "回复", "怎么回", "怎么答", "为什么",
-    "接着", "随后", "然后呢", "他说", "她说", "他问", "她问",
+    "上一句", "下一句", "对方", "回应", "回复", "怎么回", "怎么答",
+    "他说", "她说", "他问", "她问",
 )
+DIALOGUE_CONTEXT_CUES = ("为什么", "接着", "随后", "然后呢")
 NON_SPEAKER_HINTS = {"他", "她", "它", "对方", "那人", "有人", "众人", "两人"}
 MAX_RETRIEVAL_CONTEXT_CHARS = 1800
 
@@ -396,7 +397,10 @@ def _lexical_overlap(query: str, text: str) -> float:
 
 
 def _is_dialogue_query(query: str) -> bool:
-    return any(cue in query for cue in DIALOGUE_QUERY_CUES)
+    if any(cue in query for cue in DIALOGUE_QUERY_CUES):
+        return True
+    has_quote = any(mark in query for mark in ("“", "”", "「", "」", "『", "』", '"'))
+    return has_quote and any(cue in query for cue in DIALOGUE_CONTEXT_CUES)
 
 
 def _embed_queries(provider, queries: list[str]) -> list[list[float]]:
