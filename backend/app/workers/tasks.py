@@ -172,7 +172,8 @@ def fail_job(job_id: str, owner: str, error: Exception) -> None:
         record(db, actor_type="WORKER", actor_id=owner, action="generation.fail", resource_type="generation_job", resource_id=job.id, workspace_id=job.workspace_id, project_id=job.project_id, trace_id=job.trace_id, agent_run_id=job.agent_run_id, result="FAILED", safe_summary=job.error_code)
         db.commit()
         project_id, provider = job.project_id, job.provider
-    registry.failure(provider)
+    if retryable:
+        registry.failure(provider)
     publish(project_id, "generation.failed", {"job_id": job_id, "retrying": retryable})
 
 
