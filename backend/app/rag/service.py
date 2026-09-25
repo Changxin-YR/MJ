@@ -481,6 +481,29 @@ def retrieve(*, workspace_id: str, project_id: str, query: str, limit: int = 5) 
             with_payload=True,
             with_vectors=False,
         )
+        # MatchAny is broad; add a few exact-token scans so a rare two/three-character
+        # character name or quoted phrase cannot be crowded out by common Chinese n-grams.
+        lexical_by_id = {str(point.id): point for point in lexical_points}
+        for anchor in query_terms[:6]:
+            anchor_filter = models.Filter(
+                must=[
+                    *scope_conditions,
+                    models.FieldCondition(
+                        key="lexical_tokens",
+                        match=models.MatchValue(value=anchor),
+                    ),
+                ]
+            )
+            anchor_points, _ = q.scroll(
+                collection_name=name,
+                scroll_filter=anchor_filter,
+                limit=40,
+                with_payload=True,
+                with_vectors=False,
+            )
+            for point in anchor_points:
+                lexical_by_id.setdefault(str(point.id), point)
+        lexical_points = list(lexical_by_id.values())
 
     dense_scores = {str(point.id): float(point.score) for point in dense.points}
     candidates: dict[str, object] = {str(point.id): point for point in dense.points}
