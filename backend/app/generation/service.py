@@ -13,6 +13,31 @@ from app.providers.registry import registry
 from app.storyboard.state import transition_job, transition_shot
 
 
+IMAGE_CHINESE_TEXT_RULE = (
+    "画面中文字规则：如果出现招牌、海报、标签、屏幕、字幕或其他可读文字，"
+    "只能使用简体中文；禁止日文假名、韩文谚文、繁体中文和其他外语文字；"
+    "如果文字不是剧情必需，则不要生成任何文字。"
+)
+IMAGE_NON_CHINESE_TEXT_NEGATIVE = (
+    "日文，日语文字，平假名，片假名，韩文，韩语文字，谚文，繁体中文，"
+    "英文文字，乱码，伪文字，错误字符"
+)
+
+
+def apply_chinese_image_policy(prompt: str, negative_prompt: str) -> tuple[str, str]:
+    base_prompt = prompt.strip()
+    constrained_prompt = f"{base_prompt}. {IMAGE_CHINESE_TEXT_RULE}" if base_prompt else IMAGE_CHINESE_TEXT_RULE
+    max_negative_length = 500
+    reserve = len(IMAGE_NON_CHINESE_TEXT_NEGATIVE) + 2
+    user_negative = negative_prompt.strip()[: max(0, max_negative_length - reserve)]
+    constrained_negative = (
+        f"{user_negative}, {IMAGE_NON_CHINESE_TEXT_NEGATIVE}"
+        if user_negative
+        else IMAGE_NON_CHINESE_TEXT_NEGATIVE
+    )
+    return constrained_prompt, constrained_negative
+
+
 def reserve(db: Session, project: Project, amount: Decimal) -> None:
     if Decimal(project.budget_used) + Decimal(project.budget_reserved) + amount > Decimal(project.budget_limit):
         raise APIError("BUDGET_EXCEEDED", "Project budget exceeded", 409)
@@ -53,7 +78,11 @@ def request_generation(db: Session, scope: ProjectScope, shot_id: str, kind: str
         model = settings.comfyui_checkpoint
     else:
         model = f"fake-{kind.lower()}-v1"
-    job = GenerationJob(workspace_id=scope.workspace_id, project_id=scope.project_id, provider=entry.provider, model=model, resource_type="shot", resource_id=shot.id, kind=kind, input_json={"prompt": ". ".join(filter(None, [shot.description, shot.action, shot.prompt])), "negative_prompt": shot.negative_prompt, "duration": shot.duration, "dialogue": shot.dialogue, "image_asset_id": shot.current_image_asset_id}, idempotency_key=idempotency_key, estimated_cost=estimate, actual_cost=0, status="CREATED", trace_id=trace_id, agent_run_id=agent_run_id, tool_call_id=tool_call_id)
+    prompt = ". ".join(filter(None, [shot.description, shot.action, shot.prompt]))
+    negative_prompt = shot.negative_prompt
+    if kind == "IMAGE":
+        prompt, negative_prompt = apply_chinese_image_policy(prompt, negative_prompt)
+    job = GenerationJob(workspace_id=scope.workspace_id, project_id=scope.project_id, provider=entry.provider, model=model, resource_type="shot", resource_id=shot.id, kind=kind, input_json={"prompt": prompt, "negative_prompt": negative_prompt, "duration": shot.duration, "dialogue": shot.dialogue, "image_asset_id": shot.current_image_asset_id}, idempotency_key=idempotency_key, estimated_cost=estimate, actual_cost=0, status="CREATED", trace_id=trace_id, agent_run_id=agent_run_id, tool_call_id=tool_call_id)
     db.add(job)
     db.flush()
     transition_job(job, "QUEUED")
