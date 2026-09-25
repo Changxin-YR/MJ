@@ -88,6 +88,64 @@ def _is_dialogue(unit: str) -> bool:
         or ("『" in stripped and "』" in stripped)
     )
 
+def _speaker_hints(text: str) -> list[str]:
+    hints: list[str] = []
+    for line in text.splitlines():
+        for pattern in (SPEAKER_PREFIX_RE, SPEAKER_COLON_RE, SPEAKER_SUFFIX_RE):
+            match = pattern.search(line)
+            if not match:
+                continue
+            speaker = match.group(1).strip()
+            if speaker and speaker not in SPEAKER_STOP and speaker not in hints:
+                hints.append(speaker)
+    return hints[:12]
+
+
+def _window_text(units: list[str], start: int, end: int, target_chars: int) -> tuple[int, int, str]:
+    left, right = start, end
+    size = sum(len(unit) + 1 for unit in units[left:right])
+    while size < target_chars and (left > 0 or right < len(units)):
+        expanded = False
+        if left > 0 and not SCENE_BOUNDARY_RE.match(units[left - 1]):
+            left -= 1
+            size += len(units[left]) + 1
+            expanded = True
+        if size >= target_chars:
+            break
+        if right < len(units) and not SCENE_BOUNDARY_RE.match(units[right]):
+            size += len(units[right]) + 1
+            right += 1
+            expanded = True
+        if not expanded:
+            break
+    return left, right, "\n".join(units[left:right]).strip()
+
+
+def _payload_tokens(text: str, limit: int = 512) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    # 3-grams first give Chinese names/phrases more discriminative lexical recall.
+    tokens = lexical_tokens(text)
+    for token in sorted(tokens, key=lambda value: (-len(value), tokens.index(value))):
+        if token in seen:
+            continue
+        seen.add(token)
+        result.append(token)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _query_terms(query: str, limit: int = 40) -> list[str]:
+    terms = _payload_tokens(query, limit=limit)
+    # Preserve short Chinese character names such as 顾七 even if longer query terms exist.
+    named = re.findall(r"([\u4e00-\u9fff]{2,6})(?=问|说|答|道|回应|回答)", query)
+    for name in reversed(named):
+        if name not in terms:
+            terms.insert(0, name)
+    return terms[:limit]
+
+
 
 def _pack_units(
     units: list[str],
@@ -137,8 +195,8 @@ def build_chunk_records(text: str) -> list[dict]:
         units,
         start=0,
         end=len(units),
-        target_chars=680,
-        overlap_units=2,
+        target_chars=620,
+        overlap_units=3,
         chunk_kind="semantic",
     )
 
@@ -149,30 +207,34 @@ def build_chunk_records(text: str) -> list[dict]:
             continue
         dialogue_start = cursor
         run_start = cursor
-        if cursor > 0 and not _is_dialogue(units[cursor - 1]) and len(units[cursor - 1]) <= 180:
+        if cursor > 0 and not _is_dialogue(units[cursor - 1]) and len(units[cursor - 1]) <= 220 and not SCENE_BOUNDARY_RE.match(units[cursor - 1]):
             run_start = cursor - 1
         run_end = cursor
         dialogue_count = 0
         while run_end < len(units):
+            if SCENE_BOUNDARY_RE.match(units[run_end]):
+                break
             if _is_dialogue(units[run_end]):
                 dialogue_count += 1
                 run_end += 1
                 continue
-            if run_end + 1 < len(units) and _is_dialogue(units[run_end + 1]) and len(units[run_end]) <= 180:
+            if run_end + 1 < len(units) and _is_dialogue(units[run_end + 1]) and len(units[run_end]) <= 220:
                 run_end += 1
                 continue
             break
         if dialogue_count >= 2:
-            records.extend(
-                _pack_units(
-                    units,
-                    start=run_start,
-                    end=run_end,
-                    target_chars=520,
-                    overlap_units=3,
-                    chunk_kind="dialogue",
-                )
+            dialogue_records = _pack_units(
+                units,
+                start=run_start,
+                end=run_end,
+                target_chars=460,
+                overlap_units=5,
+                chunk_kind="dialogue",
             )
+            for record in dialogue_records:
+                record["dialogue_run_start"] = run_start
+                record["dialogue_run_end"] = run_end
+            records.extend(dialogue_records)
         cursor = max(run_end, dialogue_start + 1)
 
     deduplicated: list[dict] = []
@@ -182,24 +244,32 @@ def build_chunk_records(text: str) -> list[dict]:
         if key in seen:
             continue
         seen.add(key)
-        context_radius = 2 if record["chunk_kind"] == "dialogue" else 1
-        context_start = max(0, record["unit_start"] - context_radius)
-        context_end = min(len(units), record["unit_end"] + context_radius + 1)
-        context_text = "\n".join(units[context_start:context_end]).strip()
+        if record["chunk_kind"] == "dialogue":
+            parent_start = int(record.get("dialogue_run_start", record["unit_start"]))
+            parent_end = int(record.get("dialogue_run_end", record["unit_end"] + 1))
+            parent_start, parent_end, context_text = _window_text(units, parent_start, parent_end, 1800)
+        else:
+            parent_start, parent_end, context_text = _window_text(
+                units, record["unit_start"], record["unit_end"] + 1, 1200
+            )
         dialogue_units = sum(_is_dialogue(unit) for unit in units[record["unit_start"]:record["unit_end"] + 1])
         total_units = max(1, record["unit_end"] - record["unit_start"] + 1)
+        speaker_hints = _speaker_hints(context_text)
         deduplicated.append(
             {
                 **record,
+                "parent_start": parent_start,
+                "parent_end": parent_end - 1,
                 "text": context_text,
-                "embedding_text": context_text,
+                "embedding_text": f"{record['core_text']}\n\n上下文：\n{context_text}"[:2600],
                 "dialogue_ratio": dialogue_units / total_units,
+                "speaker_hints": speaker_hints,
+                "lexical_tokens": _payload_tokens(context_text),
             }
         )
     for index, record in enumerate(deduplicated):
         record["chunk_index"] = index
     return deduplicated
-
 
 def chunks(text: str, size: int = 680, overlap: int = 2) -> list[str]:
     # Backwards-compatible helper; production indexing uses build_chunk_records.
@@ -319,12 +389,24 @@ def index_story(db: Session, story: StorySource) -> KnowledgeDocument:
     return document
 
 
-def _lexical_overlap(query: str, text: str) -> float:
-    query_tokens = set(lexical_tokens(query))
-    if not query_tokens:
+def _lexical_overlap(query_terms: list[str], payload_tokens: list[str]) -> float:
+    if not query_terms:
         return 0.0
-    text_tokens = set(lexical_tokens(text))
-    return len(query_tokens & text_tokens) / len(query_tokens)
+    payload = set(payload_tokens)
+    weights = {term: 1.5 if len(term) >= 3 else 1.0 for term in query_terms}
+    matched = sum(weight for term, weight in weights.items() if term in payload)
+    total = sum(weights.values()) or 1.0
+    return matched / total
+
+
+def _overlap_ratio(left: dict, right: dict) -> float:
+    if left["source_id"] != right["source_id"]:
+        return 0.0
+    a0, a1 = int(left.get("unit_start") or 0), int(left.get("unit_end") or 0)
+    b0, b1 = int(right.get("unit_start") or 0), int(right.get("unit_end") or 0)
+    intersection = max(0, min(a1, b1) - max(a0, b0) + 1)
+    union = max(a1, b1) - min(a0, b0) + 1
+    return intersection / max(1, union)
 
 
 def retrieve(*, workspace_id: str, project_id: str, query: str, limit: int = 5) -> list[dict]:
@@ -332,37 +414,61 @@ def retrieve(*, workspace_id: str, project_id: str, query: str, limit: int = 5) 
     provider = selected_embedding_provider()
     name = collection_name(provider)
     ensure_collection(q, name, provider.dimensions)
-    scoped_filter = models.Filter(
-        must=[
-            models.FieldCondition(key="workspace_id", match=models.MatchValue(value=workspace_id)),
-            models.FieldCondition(key="project_id", match=models.MatchValue(value=project_id)),
-            models.FieldCondition(key="status", match=models.MatchValue(value="ACTIVE")),
-        ]
-    )
-    candidate_limit = min(max(limit * 4, 12), 40)
-    result = q.query_points(
+    scope_conditions = [
+        models.FieldCondition(key="workspace_id", match=models.MatchValue(value=workspace_id)),
+        models.FieldCondition(key="project_id", match=models.MatchValue(value=project_id)),
+        models.FieldCondition(key="status", match=models.MatchValue(value="ACTIVE")),
+    ]
+    scoped_filter = models.Filter(must=scope_conditions)
+    candidate_limit = min(max(limit * 8, 24), 80)
+    dense = q.query_points(
         collection_name=name,
         query=provider.embed(query),
         query_filter=scoped_filter,
         limit=candidate_limit,
         with_payload=True,
     )
+
+    query_terms = _query_terms(query)
+    lexical_points = []
+    if query_terms:
+        lexical_filter = models.Filter(
+            must=[
+                *scope_conditions,
+                models.FieldCondition(
+                    key="lexical_tokens",
+                    match=models.MatchAny(any=query_terms),
+                ),
+            ]
+        )
+        lexical_points, _ = q.scroll(
+            collection_name=name,
+            scroll_filter=lexical_filter,
+            limit=min(max(limit * 40, 120), 300),
+            with_payload=True,
+            with_vectors=False,
+        )
+
+    dense_scores = {str(point.id): float(point.score) for point in dense.points}
+    candidates: dict[str, object] = {str(point.id): point for point in dense.points}
+    for point in lexical_points:
+        candidates.setdefault(str(point.id), point)
+
     dialogue_query = any(cue in query for cue in DIALOGUE_QUERY_CUES)
     query_compact = re.sub(r"\s+", "", query)
-
     ranked: list[dict] = []
-    for point in result.points:
+    for point_id, point in candidates.items():
         payload = point.payload or {}
         context_text = str(payload.get("text") or payload.get("core_text") or "")
-        core_text = str(payload.get("core_text") or context_text)
-        source_id = str(payload.get("source_id") or "")
-        key = (source_id, core_text)
         if not context_text:
             continue
-        lexical = _lexical_overlap(query, context_text)
+        lexical = _lexical_overlap(query_terms, list(payload.get("lexical_tokens") or lexical_tokens(context_text)))
+        vector_score = dense_scores.get(point_id, 0.0)
         exact_boost = 0.12 if len(query_compact) >= 2 and query_compact in re.sub(r"\s+", "", context_text) else 0.0
-        dialogue_boost = 0.06 if dialogue_query and payload.get("chunk_kind") == "dialogue" else 0.0
-        rerank_score = float(point.score) + 0.10 * lexical + exact_boost + dialogue_boost
+        speaker_hints = [str(value) for value in payload.get("speaker_hints") or []]
+        speaker_boost = 0.12 if any(hint in query for hint in speaker_hints) else 0.0
+        dialogue_boost = 0.09 if dialogue_query and payload.get("chunk_kind") == "dialogue" else 0.0
+        rerank_score = max(vector_score, 0.78 * lexical) + exact_boost + speaker_boost + dialogue_boost
         ranked.append(
             {
                 "document_id": payload["document_id"],
@@ -371,21 +477,24 @@ def retrieve(*, workspace_id: str, project_id: str, query: str, limit: int = 5) 
                 "source_id": payload["source_id"],
                 "text": context_text,
                 "score": min(1.0, rerank_score),
-                "vector_score": float(point.score),
+                "vector_score": vector_score,
+                "lexical_score": lexical,
                 "chunk_kind": payload.get("chunk_kind", "legacy"),
                 "chunk_index": payload.get("chunk_index"),
-                "_dedupe_key": key,
+                "unit_start": payload.get("unit_start"),
+                "unit_end": payload.get("unit_end"),
+                "speaker_hints": speaker_hints,
+                "retrieval_mode": "dense+lexical" if point_id in dense_scores and lexical > 0 else ("dense" if point_id in dense_scores else "lexical"),
             }
         )
     ranked.sort(key=lambda item: item["score"], reverse=True)
+
     selected: list[dict] = []
-    seen: set[tuple[str, str]] = set()
     for item in ranked:
-        key = item.pop("_dedupe_key")
-        if key in seen:
+        if any(_overlap_ratio(item, previous) >= 0.72 for previous in selected):
             continue
-        seen.add(key)
         selected.append(item)
         if len(selected) >= min(limit, 20):
             break
     return selected
+
