@@ -209,3 +209,28 @@ def test_shot_cannot_be_edited_while_generation_is_running():
     generating = body["data"]
     code, body = call(client, "PATCH", f"{prefix}/shots/{shot['id']}", token, json={"expected_version": generating["version"], "description": "不应在生成中被修改"})
     assert code == 409 and body["error"]["code"] == "RESOURCE_CONFLICT"
+
+
+
+def test_non_chinese_visible_text_cannot_be_overridden():
+    client = TestClient(app)
+    _, token = register(client, "language-policy")
+    prefix, shot = make_ready_shot(client, token)
+    with SessionLocal() as db:
+        row = db.get(Shot, shot["id"])
+        row.status = "REVIEW_REQUIRED"
+        row.inspection_json = {
+            "status": "FAIL",
+            "score": 0.1,
+            "issues": ["Korean text is visible on a sign"],
+            "checks": {"visible_text_language": "FAIL"},
+            "method": "QWEN_VL",
+        }
+        db.commit()
+        version = row.version
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/transition", token, json={
+        "expected_version": version,
+        "target": "APPROVED",
+        "review_reason": "人工确认后仍想强制通过",
+    })
+    assert code == 409 and body["error"]["code"] == "LANGUAGE_POLICY_FAILED"
