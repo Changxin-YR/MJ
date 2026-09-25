@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ok, trace_id
@@ -86,7 +86,8 @@ def next_no(db: Session, model, column, scope: ProjectScope, parent_column=None,
     clauses = [model.workspace_id == scope.workspace_id, model.project_id == scope.project_id]
     if parent_column is not None:
         clauses.append(parent_column == parent_id)
-    return (db.scalar(select(func.max(column)).where(*clauses)) or 0) + 1
+    query = select(column).where(*clauses).order_by(column.desc()).limit(1).with_for_update()
+    return (db.scalar(query) or 0) + 1
 
 
 def validate_character_ids(db: Session, scope: ProjectScope, ids: list[str]):
