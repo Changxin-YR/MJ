@@ -1,5 +1,5 @@
 import { onBeforeUnmount, ref, watch, type Ref } from 'vue'
-import { getAccessToken } from '../api'
+import { getAccessToken, refreshAccessToken } from '../api'
 
 export function useProjectEvents(projectId: Ref<string>, onEvent: (name: string) => void) {
   const connected = ref(false)
@@ -14,6 +14,12 @@ export function useProjectEvents(projectId: Ref<string>, onEvent: (name: string)
     while (!stopped && !signal.aborted) {
       try {
         const response = await fetch(`/api/v1/projects/${id}/events`, { headers: { Authorization: `Bearer ${getAccessToken() || ''}` }, signal })
+        if (response.status === 401) {
+          connected.value = false
+          const token = await refreshAccessToken()
+          if (!token) throw new Error('Session expired')
+          continue
+        }
         if (!response.ok || !response.body) throw new Error('Stream unavailable')
         connected.value = true
         const reader = response.body.getReader()
@@ -21,7 +27,7 @@ export function useProjectEvents(projectId: Ref<string>, onEvent: (name: string)
         let buffer = ''
         while (!signal.aborted) {
           const chunk = await reader.read()
-          if (chunk.done) break
+          if (chunk.done) { connected.value = false; break }
           buffer += decoder.decode(chunk.value, { stream: true })
           const parts = buffer.split('\n\n')
           buffer = parts.pop() || ''
