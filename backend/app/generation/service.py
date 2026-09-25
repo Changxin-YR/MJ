@@ -9,7 +9,15 @@ from sqlalchemy.orm import Session
 from app.api.errors import APIError
 from app.auth.dependencies import ProjectScope, require
 from app.config import settings
-from app.models import Character, CharacterVersion, GenerationJob, OutboxEvent, Project, Scene, Shot
+from app.models import (
+    Character,
+    CharacterVersion,
+    GenerationJob,
+    OutboxEvent,
+    Project,
+    Scene,
+    Shot,
+)
 from app.providers.registry import registry
 from app.storyboard.state import transition_job, transition_shot
 
