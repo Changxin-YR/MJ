@@ -5,14 +5,29 @@ import tempfile
 from pathlib import Path
 from uuid import uuid4
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 from app.providers.base import MediaResult
 
 
+CJK_FONT_PATHS = (
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc",
+)
+
+
+def _cjk_font(size: int):
+    for path in CJK_FONT_PATHS:
+        try:
+            return ImageFont.truetype(path, size=size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
 class FakeImageProvider:
     def generate(self, prompt: str, negative_prompt: str = "") -> MediaResult:
-        digest = hashlib.sha256(prompt.encode()).digest()
+        digest = hashlib.sha256(prompt.encode("utf-8")).digest()
         background = (22 + digest[0] // 4, 26 + digest[1] // 4, 42 + digest[2] // 4)
         image = Image.new("RGB", (1280, 720), background)
         draw = ImageDraw.Draw(image)
@@ -25,8 +40,10 @@ class FakeImageProvider:
         draw.rounded_rectangle((64, 500, 1216, 660), radius=24, fill=(10, 14, 24))
         title = "FRAMEFORGE · FAKE PROVIDER"
         draw.text((92, 526), title, fill=(141, 222, 224))
-        safe_prompt = prompt.encode("ascii", "ignore").decode()[:100] or "Storyboard preview"
-        draw.text((92, 570), safe_prompt, fill="white")
+        safe_prompt = " ".join(prompt.split())[:72] or "分镜预览"
+        lines = [safe_prompt[index : index + 36] for index in range(0, len(safe_prompt), 36)][:2]
+        for index, line in enumerate(lines):
+            draw.text((92, 566 + index * 34), line, fill="white", font=_cjk_font(26))
         output = io.BytesIO()
         image.save(output, format="PNG")
         return MediaResult(content=output.getvalue(), mime="image/png", width=1280, height=720, model="fake-image-v1")
