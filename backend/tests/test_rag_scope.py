@@ -295,3 +295,13 @@ def test_dialogue_retrieval_deduplicates_heavily_overlapping_chunks():
     ]
     assert len(ranges) == len(set(ranges))
     assert any("脚步声来自楼上" in item["text"] for item in results)
+
+
+
+def test_chinese_speaker_hints_are_conservative():
+    assert rag_service._speaker_hints('顾七又问：“还进去吗？”') == ["顾七"]
+    assert rag_service._speaker_hints('沈青衡道：“进去。”') == ["沈青衡"]
+    assert rag_service._speaker_hints('顾七盯着他：“你确定？”') == []
+    terms = rag_service._query_terms("顾七问青铜钥匙在哪里，对方怎么回答？")
+    assert "顾七" in terms
+    assert "对方怎么" not in terms
