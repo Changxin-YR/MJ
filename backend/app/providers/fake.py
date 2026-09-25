@@ -9,7 +9,6 @@ from PIL import Image, ImageDraw, ImageFont
 
 from app.providers.base import MediaResult
 
-
 CJK_FONT_PATHS = (
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc",
