@@ -26,6 +26,7 @@ def lexical_tokens(text: str) -> list[str]:
 
 class FakeEmbeddingProvider:
     model = "deterministic-test-v2-cn-ngram"
+    profile = "deterministic-cn-ngram-v2"
     dimensions = 128
     batch_size = 100
 
@@ -43,6 +44,7 @@ class FakeEmbeddingProvider:
 
 
 class DashScopeEmbeddingProvider:
+    profile = "dashscope-native-asymmetric-v1"
     dimensions = 1024
     batch_size = 10
     query_instruct = (
