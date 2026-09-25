@@ -1,10 +1,14 @@
+from types import SimpleNamespace
+
 import pytest
 
+from app.agent import inspector
 from app.agent.inspector import CHECKS, _frames
 from app.asset.storage import validate
 from app.config import settings
 from app.generation.service import apply_chinese_image_policy
 from app.providers import dashscope, embeddings
+from app.providers.base import MediaResult
 from app.providers.fake import FakeImageProvider, FakeTTSProvider, FakeVideoProvider
 from app.providers.registry import ProviderRegistry
 
@@ -132,3 +136,70 @@ def test_dashscope_embedding_batches_texts_and_preserves_order(monkeypatch):
     assert len(vectors) == 2
     assert vectors[0][0] == 1.0
     assert vectors[1][0] == 2.0
+
+
+
+def test_dashscope_voice_inspector_rejects_non_chinese_audio(monkeypatch):
+    monkeypatch.setattr(settings, "dashscope_api_key", "test-key")
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "choices": [{
+                    "message": {
+                        "content": "こんにちは。",
+                        "annotations": [{"type": "audio_info", "language": "ja"}],
+                    }
+                }]
+            }
+
+    captured = {}
+
+    def fake_post(url, *, headers, json, timeout):
+        captured.update({"url": url, "headers": headers, "json": json, "timeout": timeout})
+        return Response()
+
+    monkeypatch.setattr(inspector.httpx, "post", fake_post)
+    result = inspector.inspect_media(
+        SimpleNamespace(dialogue="城市醒来了。"),
+        MediaResult(content=b"RIFFfake-wav", mime="audio/wav", model="qwen3-tts-flash"),
+        "dashscope",
+    )
+    assert result["status"] == "FAIL"
+    assert result["checks"]["voice_language"] == "FAIL"
+    assert result["language"] == "ja"
+    assert captured["json"]["model"] == settings.dashscope_asr_model
+    assert captured["json"]["messages"][0]["content"][0]["type"] == "input_audio"
+    assert "language" not in captured["json"]["asr_options"]
+
+
+def test_dashscope_voice_inspector_accepts_matching_chinese_audio(monkeypatch):
+    monkeypatch.setattr(settings, "dashscope_api_key", "test-key")
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "choices": [{
+                    "message": {
+                        "content": "城市醒来了。",
+                        "annotations": [{"type": "audio_info", "language": "zh"}],
+                    }
+                }]
+            }
+
+    monkeypatch.setattr(inspector.httpx, "post", lambda *args, **kwargs: Response())
+    result = inspector.inspect_media(
+        SimpleNamespace(dialogue="城市醒来了。"),
+        MediaResult(content=b"RIFFfake-wav", mime="audio/wav", model="qwen3-tts-flash"),
+        "dashscope",
+    )
+    assert result["status"] == "PASS"
+    assert result["checks"]["voice_language"] == "PASS"
+    assert result["checks"]["dialogue"] == "PASS"
+    assert result["score"] >= 0.99
