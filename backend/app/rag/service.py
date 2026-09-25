@@ -29,6 +29,12 @@ SPEAKER_SUFFIX_RE = re.compile(
     r"(?:问道|问|说道|说|答道|答|喊道|喊|道)"
 )
 SPEAKER_STOP = {"他", "她", "它", "他们", "她们", "对方", "那人", "此人", "少年", "少女", "男人", "女人", "老人"}
+QUERY_STOP_TOKENS = set(
+    lexical_tokens(
+        "对方怎么回答 对方怎么说 为什么 怎么回事 谁说的 这句话 上一句 下一句 "
+        "前一句 后一句 然后呢 接着说 随后说 回答了什么 说了什么 问了什么"
+    )
+)
 
 
 def collection_name(provider) -> str:
@@ -153,7 +159,8 @@ def _payload_tokens(text: str, limit: int = 512) -> list[str]:
 
 
 def _query_terms(query: str, limit: int = 40) -> list[str]:
-    terms = _payload_tokens(query, limit=limit)
+    raw_terms = _payload_tokens(query, limit=limit * 2)
+    terms = [term for term in raw_terms if term not in QUERY_STOP_TOKENS][:limit]
     # Preserve short Chinese character names such as 顾七 even if longer query terms exist.
     named = re.findall(r"(?:^|[，。！？；、\s])([\u4e00-\u9fff]{2,4})(?=问|说|答|道|回应|回答)", query)
     for name in reversed(named):
