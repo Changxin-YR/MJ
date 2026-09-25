@@ -18,12 +18,15 @@ DIALOGUE_QUERY_CUES = (
 )
 SCENE_BOUNDARY_RE = re.compile(r"^(?:第[一二三四五六七八九十百千万\d]+[章节卷回]|[-—=*#]{3,})")
 SPEAKER_PREFIX_RE = re.compile(
-    r"^\s*([\u4e00-\u9fffA-Za-z0-9_·]{1,12})(?:问道|问|说道|说|答道|回答|答|喊道|喊|"
-    r"低声道|轻声道|沉声道|冷声道|笑道|开口道|开口|反问|继续道|淡淡道)"
+    r"^\s*([\u4e00-\u9fffA-Za-z0-9_·]{1,8}?)(?:又|再|忽然|继续|低声|轻声|沉声|冷声|笑着)?"
+    r"(?:问道|问|说道|说|答道|回答|答|喊道|喊|开口道|开口|反问|淡淡道)"
 )
-SPEAKER_COLON_RE = re.compile(r"^\s*([\u4e00-\u9fffA-Za-z0-9_·]{1,12})[：:]")
+SPEAKER_COLON_RE = re.compile(
+    r"^\s*([\u4e00-\u9fff]{1,4}|[A-Za-z0-9_·]{1,12})[：:]"
+)
 SPEAKER_SUFFIX_RE = re.compile(
-    r"[”」』\"]\s*([\u4e00-\u9fffA-Za-z0-9_·]{1,12})(?:问道|问|说道|说|答道|答|喊道|喊|道)"
+    r"[”」』\"]\s*([\u4e00-\u9fffA-Za-z0-9_·]{1,8}?)(?:又|再|低声|轻声|沉声|冷声)?"
+    r"(?:问道|问|说道|说|答道|答|喊道|喊|道)"
 )
 SPEAKER_STOP = {"他", "她", "它", "他们", "她们", "对方", "那人", "此人", "少年", "少女", "男人", "女人", "老人"}
 
@@ -152,7 +155,7 @@ def _payload_tokens(text: str, limit: int = 512) -> list[str]:
 def _query_terms(query: str, limit: int = 40) -> list[str]:
     terms = _payload_tokens(query, limit=limit)
     # Preserve short Chinese character names such as 顾七 even if longer query terms exist.
-    named = re.findall(r"([\u4e00-\u9fff]{2,6})(?=问|说|答|道|回应|回答)", query)
+    named = re.findall(r"(?:^|[，。！？；、\\s])([\\u4e00-\\u9fff]{2,4})(?=问|说|答|道|回应|回答)", query)
     for name in reversed(named):
         if name not in terms:
             terms.insert(0, name)
