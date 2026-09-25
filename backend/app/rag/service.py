@@ -23,7 +23,7 @@ DIALOGUE_QUERY_CUES = (
     "他说", "她说", "他问", "她问",
 )
 DIALOGUE_CONTEXT_CUES = ("为什么", "接着", "随后", "然后呢")
-NON_SPEAKER_HINTS = {"他", "她", "它", "对方", "那人", "有人", "众人", "两人"}
+NON_SPEAKER_HINTS = {"我", "你", "他", "她", "它", "我们", "你们", "他们", "她们", "对方", "那人", "有人", "众人", "两人"}
 MAX_RETRIEVAL_CONTEXT_CHARS = 1800
 
 
