@@ -154,7 +154,13 @@ def test_generation_job_uses_active_character_dna_in_real_prompt():
     code, body = call(client, "POST", f"{prefix}/characters/{character['id']}/versions/{version_id}/activate", token, json={"expected_version": character["version"]})
     assert code == 200, body
 
-    code, body = call(client, "PATCH", f"{prefix}/shots/{shot['id']}", token, json={"expected_version": shot["version"], "character_ids": [character["id"]]})
+    code, body = call(client, "PATCH", f"{prefix}/shots/{shot['id']}", token, json={
+        "expected_version": shot["version"],
+        "character_ids": [character["id"]],
+        "camera_angle": "low-angle",
+        "camera_movement": "slow push-in",
+        "emotion": "克制紧张",
+    })
     assert code == 200, body
     shot = body["data"]
     assert shot["status"] == "PLANNED"
@@ -168,6 +174,10 @@ def test_generation_job_uses_active_character_dna_in_real_prompt():
         assert "林舟始终穿深蓝风衣，短黑发" in job.input_json["prompt"]
         assert "深蓝风衣" in job.input_json["prompt"]
         assert "项目统一视觉风格：水墨电影感国漫" in job.input_json["prompt"]
+        assert "EXT. ROOFTOP" in job.input_json["prompt"]
+        assert "机位：low-angle" in job.input_json["prompt"]
+        assert "镜头运动：slow push-in" in job.input_json["prompt"]
+        assert "情绪：克制紧张" in job.input_json["prompt"]
         assert "金色长发，日式校服" in job.input_json["negative_prompt"]
 
 
