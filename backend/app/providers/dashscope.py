@@ -66,7 +66,7 @@ class DashScopeImageProvider:
         body = _api("POST", "services/aigc/multimodal-generation/generation", payload={
             "model": settings.dashscope_image_model,
             "input": {"messages": [{"role": "user", "content": [{"text": prompt}]}]},
-            "parameters": {"prompt_extend": True, "watermark": False, "n": 1, "negative_prompt": negative_prompt, "size": settings.dashscope_image_size},
+            "parameters": {"prompt_extend": False, "watermark": False, "n": 1, "negative_prompt": negative_prompt, "size": settings.dashscope_image_size},
         })
         content = body["output"]["choices"][0]["message"]["content"]
         image_url = next(item["image"] for item in content if "image" in item)
@@ -106,7 +106,7 @@ class DashScopeTTSProvider:
     def synthesize(self, text: str, duration: float) -> MediaResult:
         body = _api("POST", "services/aigc/multimodal-generation/generation", payload={
             "model": settings.dashscope_tts_model,
-            "input": {"text": text, "voice": "Cherry", "language_type": "Auto"},
+            "input": {"text": text, "voice": "Cherry", "language_type": "Chinese"},
         })
         audio = _download(body["output"]["audio"]["url"])
         with tempfile.TemporaryDirectory() as directory:
