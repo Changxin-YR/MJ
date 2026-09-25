@@ -34,7 +34,9 @@ class ProviderRegistry:
 
     def __init__(self):
         real_enabled = bool(settings.dashscope_api_key) and settings.provider_mode in {"dashscope", "auto"}
-        fake_enabled = settings.provider_mode in {"fake", "auto", "comfyui"}
+        # FakeProvider is test/dev-only. Never silently fall back to fake media
+        # in auto mode when a real provider is unhealthy.
+        fake_enabled = settings.provider_mode in {"fake", "comfyui"}
         comfy_enabled = bool(settings.comfyui_checkpoint) and settings.provider_mode in {"comfyui", "auto"}
         self.entries = {
             "fake": ProviderEntry("fake", fake_enabled, {"IMAGE", "VIDEO", "VOICE"}, 100, {"IMAGE": 0.0, "VIDEO": 0.0, "VOICE": 0.0}),
