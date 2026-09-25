@@ -106,9 +106,13 @@ def test_voice_check_preserves_visual_failure_and_review_requires_reason():
     client = TestClient(app)
     _, token = register(client, "visual-review")
     prefix, shot = make_ready_shot(client, token)
-    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": "IMAGE", "idempotency_key": str(uuid4())})
-    assert code == 200, body
-    process_generation(body["data"]["id"])
+    for kind in ("IMAGE", "VIDEO"):
+        code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={"kind": kind, "idempotency_key": str(uuid4())})
+        assert code == 200, body
+        process_generation(body["data"]["id"])
+        code, body = call(client, "GET", f"{prefix}/shots/{shot['id']}", token)
+        assert code == 200, body
+        shot = body["data"]
     with SessionLocal() as db:
         row = db.get(Shot, shot["id"])
         row.inspection_json = {"status": "FAIL", "score": 0.2, "issues": ["Two characters"], "checks": {"character_count": "FAIL"}, "method": "QWEN_VL"}
@@ -303,3 +307,28 @@ def test_foreign_script_voice_is_rejected_before_budget_reservation():
     assert code == 422 and body["error"]["code"] == "INVALID_PARAMETER"
     code, body = call(client, "GET", prefix, token)
     assert code == 200 and body["data"]["budget_reserved"] == 0
+
+
+
+def test_final_approval_requires_current_video():
+    client = TestClient(app)
+    _, token = register(client, "approval-needs-video")
+    prefix, shot = make_ready_shot(client, token)
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/generations", token, json={
+        "kind": "IMAGE",
+        "idempotency_key": str(uuid4()),
+    })
+    assert code == 200, body
+    process_generation(body["data"]["id"])
+    code, body = call(client, "GET", f"{prefix}/shots/{shot['id']}", token)
+    assert code == 200, body
+    image_only = body["data"]
+    assert image_only["status"] == "REVIEW_REQUIRED"
+    assert image_only["current_image_asset_id"]
+    assert image_only["current_video_asset_id"] is None
+
+    code, body = call(client, "POST", f"{prefix}/shots/{shot['id']}/transition", token, json={
+        "expected_version": image_only["version"],
+        "target": "APPROVED",
+    })
+    assert code == 409 and body["error"]["code"] == "RESOURCE_CONFLICT"
