@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import KnowledgeDocument, KnowledgeVersion, StorySource
+from app.models import Character, KnowledgeDocument, KnowledgeVersion, StorySource
 from app.providers.embeddings import lexical_tokens, selected_embedding_provider
 
 DIALOGUE_START_RE = re.compile(r'^\s*(?:[“「『"‘]|[\u4e00-\u9fffA-Za-z0-9_·]{1,12}[：:])')
@@ -85,18 +85,28 @@ def _is_dialogue(unit: str) -> bool:
     )
 
 
-def _explicit_speaker(unit: str) -> str | None:
-    match = EXPLICIT_SPEAKER_RE.match(unit.strip())
-    if not match:
-        return None
-    speaker = match.group(1).strip()
-    return None if speaker in NON_SPEAKER_HINTS else speaker
+def _explicit_speaker(unit: str, known_speakers: list[str] | None = None) -> str | None:
+    stripped = unit.strip()
+    match = EXPLICIT_SPEAKER_RE.match(stripped)
+    if match:
+        speaker = match.group(1).strip()
+        if speaker not in NON_SPEAKER_HINTS:
+            return speaker
+    if known_speakers:
+        quote_positions = [stripped.find(mark) for mark in ("“", "「", "『", '"', "‘") if stripped.find(mark) >= 0]
+        quote_position = min(quote_positions) if quote_positions else -1
+        if quote_position > 0:
+            prefix = stripped[: quote_position + 1]
+            for speaker in sorted({name.strip() for name in known_speakers if name.strip()}, key=len, reverse=True):
+                if stripped.startswith(speaker) and ("：" in prefix or ":" in prefix):
+                    return speaker
+    return None
 
 
-def _speaker_hints(units: list[str]) -> list[str]:
+def _speaker_hints(units: list[str], known_speakers: list[str] | None = None) -> list[str]:
     hints: list[str] = []
     for unit in units:
-        speaker = _explicit_speaker(unit)
+        speaker = _explicit_speaker(unit, known_speakers)
         if speaker and speaker not in hints:
             hints.append(speaker)
     return hints
@@ -141,7 +151,7 @@ def _pack_units(
     return records
 
 
-def build_chunk_records(text: str) -> list[dict]:
+def build_chunk_records(text: str, known_speakers: list[str] | None = None) -> list[dict]:
     units = _split_cn_units(text)
     if not units:
         return []
@@ -212,7 +222,8 @@ def build_chunk_records(text: str) -> list[dict]:
         total_units = max(1, record["unit_end"] - record["unit_start"] + 1)
         speaker_hints = _speaker_hints(
             units[max(0, context_start - 2):min(len(units), context_end + 2)]
-            + (anchor_text.split("\n") if anchor_text else [])
+            + (anchor_text.split("\n") if anchor_text else []),
+            known_speakers,
         )
         has_subjectless_dialogue = any(
             SUBJECTLESS_DIALOGUE_RE.match(unit.strip())
@@ -303,7 +314,15 @@ def index_story(db: Session, story: StorySource) -> KnowledgeDocument:
     provider = selected_embedding_provider()
     name = collection_name(provider)
     ensure_collection(q, name, provider.dimensions)
-    records = build_chunk_records(story.content)
+    known_speakers = list(
+        db.scalars(
+            select(Character.name).where(
+                Character.workspace_id == story.workspace_id,
+                Character.project_id == story.project_id,
+            )
+        ).all()
+    )
+    records = build_chunk_records(story.content, known_speakers=known_speakers)
 
     vectors: list[list[float]] = []
     batch_size = max(1, int(getattr(provider, "batch_size", 1)))
