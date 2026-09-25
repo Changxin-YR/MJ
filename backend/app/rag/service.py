@@ -212,7 +212,7 @@ def build_chunk_records(text: str) -> list[dict]:
         total_units = max(1, record["unit_end"] - record["unit_start"] + 1)
         speaker_hints = _speaker_hints(
             units[max(0, context_start - 2):min(len(units), context_end + 2)]
-            + ([anchor_text] if anchor_text else [])
+            + (anchor_text.split("\n") if anchor_text else [])
         )
         has_subjectless_dialogue = any(
             SUBJECTLESS_DIALOGUE_RE.match(unit.strip())
