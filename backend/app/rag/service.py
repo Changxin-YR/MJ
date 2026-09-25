@@ -368,7 +368,7 @@ def index_story(db: Session, story: StorySource) -> KnowledgeDocument:
         batch = records[start:start + batch_size]
         texts = [record["embedding_text"] for record in batch]
         if hasattr(provider, "embed_many"):
-            vectors.extend(provider.embed_many(texts))
+            vectors.extend(provider.embed_many(texts, text_type="document"))
         else:
             vectors.extend(provider.embed(text) for text in texts)
     if len(vectors) != len(records):
@@ -456,7 +456,7 @@ def retrieve(*, workspace_id: str, project_id: str, query: str, limit: int = 5) 
     candidate_limit = min(max(limit * 8, 24), 80)
     dense = q.query_points(
         collection_name=name,
-        query=provider.embed(query),
+        query=provider.embed(query, text_type="query"),
         query_filter=scoped_filter,
         limit=candidate_limit,
         with_payload=True,
