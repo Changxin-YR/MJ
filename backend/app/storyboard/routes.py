@@ -261,10 +261,10 @@ def transition(shot_id: str, payload: ShotAction, request: Request, scope: Proje
     if shot.version != payload.expected_version:
         raise APIError("RESOURCE_VERSION_CONFLICT", "Shot changed", 409)
     inspection = shot.inspection_json or {}
-    if payload.target in {"APPROVED", "LOCKED"} and not shot.current_video_asset_id:
-        raise APIError("RESOURCE_CONFLICT", "Generate and review the current video before final approval", 409)
     if payload.target in {"APPROVED", "LOCKED"} and (inspection.get("checks") or {}).get("visible_text_language") == "FAIL":
         raise APIError("LANGUAGE_POLICY_FAILED", "Non-Chinese visible text must be regenerated before approval", 409)
+    if payload.target in {"APPROVED", "LOCKED"} and not shot.current_video_asset_id:
+        raise APIError("RESOURCE_CONFLICT", "Generate and review the current video before final approval", 409)
     if payload.target == "APPROVED" and inspection.get("status") == "FAIL" and not (payload.review_reason or "").strip():
         raise APIError("INSPECTION_FAILED", "A reason is required to approve a failed inspection", 409)
     if payload.target == "APPROVED" and inspection.get("status") == "FAIL":
