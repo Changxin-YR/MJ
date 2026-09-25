@@ -333,3 +333,37 @@ def test_pronouns_are_not_promoted_to_stable_speaker_identities():
     dialogue = [record for record in records if record["chunk_kind"] == "dialogue"]
     assert dialogue
     assert all("我" not in record.get("speaker_hints", []) for record in dialogue)
+
+
+
+def test_character_created_after_index_enriches_dialogue_without_reindex():
+    client = TestClient(app)
+    _, token = register(client, "rag-late-character")
+    _, body = call(client, "POST", "/api/v1/workspaces", token, json={"name": "角色后建 RAG"})
+    workspace = body["data"]["id"]
+    _, body = call(client, "POST", f"/api/v1/workspaces/{workspace}/projects", token, json={"name": "角色后建项目"})
+    prefix = f"/api/v1/projects/{body['data']['id']}"
+    story = """沈青衡没有说话。
+顾七盯着他：“你是不是早就知道？”
+“只是猜到一点。”
+顾七把灯提得更高：“那现在呢？”
+“现在可以确定了。”"""
+    code, body = call(client, "POST", f"{prefix}/stories", token, json={"title": "后建角色对白", "content": story})
+    assert code == 200, body
+    story_id = body["data"]["id"]
+    code, body = call(client, "POST", f"{prefix}/knowledge/stories/{story_id}/index", token)
+    assert code == 200, body
+
+    code, body = call(client, "POST", f"{prefix}/characters", token, json={"name": "顾七", "dna": {}})
+    assert code == 200, body
+
+    code, body = call(
+        client,
+        "POST",
+        f"{prefix}/knowledge/search",
+        token,
+        json={"query": "顾七问对方是不是早就知道，对方怎么回答？", "limit": 3},
+    )
+    assert code == 200 and body["data"], body
+    assert "顾七" in body["data"][0].get("speaker_hints", [])
+    assert "只是猜到一点" in body["data"][0]["text"]
