@@ -54,6 +54,15 @@ async function search() {
     notice.value = `在当前项目找到 ${results.value.length} 条内容。`
   } catch (cause) { error.value = (cause as Error).message }
 }
+async function reindexAll() {
+  busy.value = true; error.value = ''
+  try {
+    const result = await api.post<{ total: number; indexed: string[]; failed: { story_id: string; error: string }[] }>(`${root.value}/knowledge/reindex-stories`)
+    notice.value = result.failed.length
+      ? `已重建 ${result.indexed.length}/${result.total} 份故事索引，${result.failed.length} 份失败。`
+      : `已重建全部 ${result.indexed.length} 份故事索引。`
+  } catch (cause) { error.value = (cause as Error).message } finally { busy.value = false }
+}
 function editBible(item: ProjectBible) {
   bibleEditingId.value = item.id
   bibleTitle.value = item.title
@@ -95,7 +104,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="section-head"><div><div class="section-kicker">Story Studio</div><h1>故事工作室</h1><p>导入原作、维护人工确认的世界观事实，并建立项目级语义检索。</p></div></div>
+  <div class="section-head"><div><div class="section-kicker">Story Studio</div><h1>故事工作室</h1><p>导入原作、维护人工确认的世界观事实，并建立项目级语义检索。</p></div><button v-if="canEdit" class="btn" :disabled="busy || !stories.length" @click="reindexAll">重建全部索引</button></div>
   <div v-if="error" class="error" style="margin-bottom:16px">{{ error }}</div><div v-if="notice" class="notice" style="margin-bottom:16px">{{ notice }}</div>
 
   <div class="split"><div class="stack"><section v-if="canEdit" class="panel panel-pad"><h2>导入故事</h2><form @submit.prevent="importStory"><div class="field"><label>标题</label><input v-model="title" required maxlength="200" placeholder="故事标题" /></div><div class="field"><label>故事正文</label><textarea v-model="content" required minlength="20" rows="9" placeholder="粘贴真实故事或小说片段…"></textarea></div><button class="btn btn-primary" :disabled="busy"><Upload :size="15" />导入原作</button></form></section><section class="panel panel-pad"><div class="between"><h2>原作列表</h2><span class="muted">{{ stories.length }} 份</span></div><div v-if="stories.length" class="list"><button v-for="story in stories" :key="story.id" class="list-row" style="text-align:left;color:inherit" :class="{active:selectedId === story.id}" @click="selectedId = story.id"><div><strong>{{ story.title }}</strong><br><small>{{ new Date(story.created_at).toLocaleDateString('zh-CN') }}</small></div><BookOpen :size="15" /></button></div><div v-else class="empty"><div><strong>暂无原作</strong><p>导入故事后，角色与分镜会围绕它展开。</p></div></div></section></div>
