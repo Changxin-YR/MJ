@@ -126,9 +126,18 @@ class CharacterVersion(IdMixin, ScopeMixin, Base):
 
 class CharacterRelationship(IdMixin, ScopeMixin, Base):
     __tablename__ = "character_relationships"
-    source_character_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    target_character_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "source_character_id",
+            "target_character_id",
+            name="uq_character_relationship_pair",
+        ),
+    )
+    source_character_id: Mapped[str] = mapped_column(String(36), ForeignKey("characters.id"), nullable=False)
+    target_character_id: Mapped[str] = mapped_column(String(36), ForeignKey("characters.id"), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
 
 class Episode(IdMixin, ScopeMixin, Base):
