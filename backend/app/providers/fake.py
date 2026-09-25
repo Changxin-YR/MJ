@@ -5,9 +5,24 @@ import tempfile
 from pathlib import Path
 from uuid import uuid4
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 from app.providers.base import MediaResult
+
+CJK_FONT_PATHS = (
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf",
+    "C:/Windows/Fonts/msyh.ttc",
+    "C:/Windows/Fonts/simhei.ttf",
+    "/System/Library/Fonts/PingFang.ttc",
+)
+
+
+def _cjk_font(size: int):
+    for font_path in CJK_FONT_PATHS:
+        if Path(font_path).exists():
+            return ImageFont.truetype(font_path, size=size)
+    return ImageFont.load_default()
 
 
 class FakeImageProvider:
@@ -23,10 +38,12 @@ class FakeImageProvider:
             color = (min(255, background[0] + 10 + i * 4), min(255, background[1] + i * 7), min(255, background[2] + i * 3))
             draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=color)
         draw.rounded_rectangle((64, 500, 1216, 660), radius=24, fill=(10, 14, 24))
-        title = "FRAMEFORGE · FAKE PROVIDER"
-        draw.text((92, 526), title, fill=(141, 222, 224))
-        safe_prompt = prompt.encode("ascii", "ignore").decode()[:100] or "Storyboard preview"
-        draw.text((92, 570), safe_prompt, fill="white")
+        title = "漫剧假数据预览"
+        draw.text((92, 520), title, fill=(141, 222, 224), font=_cjk_font(30))
+        preview = prompt.strip().replace("\n", " ")[:80] or "分镜预览"
+        draw.text((92, 565), preview[:40], fill="white", font=_cjk_font(24))
+        if len(preview) > 40:
+            draw.text((92, 604), preview[40:80], fill="white", font=_cjk_font(24))
         output = io.BytesIO()
         image.save(output, format="PNG")
         return MediaResult(content=output.getvalue(), mime="image/png", width=1280, height=720, model="fake-image-v1")
