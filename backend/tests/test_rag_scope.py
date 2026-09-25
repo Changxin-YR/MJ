@@ -182,11 +182,11 @@ class _FlatEmbedding(FakeEmbeddingProvider):
     dimensions = 32
     batch_size = 100
 
-    def embed(self, text: str) -> list[float]:
+    def embed(self, text: str, text_type: str = "document") -> list[float]:
         return [1.0] + [0.0] * (self.dimensions - 1)
 
-    def embed_many(self, texts: list[str]) -> list[list[float]]:
-        return [self.embed(text) for text in texts]
+    def embed_many(self, texts: list[str], text_type: str = "document") -> list[list[float]]:
+        return [self.embed(text, text_type=text_type) for text in texts]
 
 
 def test_long_subjectless_dialogue_keeps_explicit_speaker_anchors():
