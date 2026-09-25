@@ -29,7 +29,7 @@ class FakeEmbeddingProvider:
     dimensions = 128
     batch_size = 100
 
-    def embed(self, text: str) -> list[float]:
+    def embed(self, text: str, text_type: str = "document") -> list[float]:
         values = [0.0] * self.dimensions
         for token in lexical_tokens(text):
             digest = hashlib.sha256(token.encode()).digest()
@@ -38,33 +38,43 @@ class FakeEmbeddingProvider:
         length = math.sqrt(sum(v * v for v in values)) or 1
         return [v / length for v in values]
 
-    def embed_many(self, texts: list[str]) -> list[list[float]]:
-        return [self.embed(text) for text in texts]
+    def embed_many(self, texts: list[str], text_type: str = "document") -> list[list[float]]:
+        return [self.embed(text, text_type=text_type) for text in texts]
 
 
 class DashScopeEmbeddingProvider:
     dimensions = 1024
     batch_size = 10
+    query_instruct = (
+        "Retrieve passages from Chinese fiction that answer the question while preserving "
+        "character identity, dialogue turns, actions, and causal context."
+    )
 
     @property
     def model(self) -> str:
         return settings.dashscope_embedding_model
 
-    def embed_many(self, texts: list[str]) -> list[list[float]]:
+    def embed_many(self, texts: list[str], text_type: str = "document") -> list[list[float]]:
         if not texts:
             return []
+        if text_type not in {"document", "query"}:
+            raise ValueError("Embedding text_type must be document or query")
         if len(texts) > self.batch_size:
             raise ValueError(f"Embedding batch exceeds {self.batch_size} texts")
         if not settings.dashscope_api_key:
             raise RuntimeError("DASHSCOPE_API_KEY is required for real embeddings")
+        parameters = {"dimension": self.dimensions, "text_type": text_type}
+        if text_type == "query":
+            parameters["instruct"] = self.query_instruct
         response = httpx.post(
-            f"{settings.dashscope_chat_base_url.rstrip('/')}/embeddings",
+            f"{settings.dashscope_base_url.rstrip('/')}/services/embeddings/text-embedding/text-embedding",
             headers={"Authorization": f"Bearer {settings.dashscope_api_key}"},
-            json={"model": self.model, "input": texts, "dimensions": self.dimensions, "encoding_format": "float"},
+            json={"model": self.model, "input": {"texts": texts}, "parameters": parameters},
             timeout=60,
         )
         response.raise_for_status()
-        rows = sorted(response.json()["data"], key=lambda row: row.get("index", 0))
+        payload = response.json()
+        rows = sorted(payload["output"]["embeddings"], key=lambda row: row.get("text_index", 0))
         if len(rows) != len(texts):
             raise ValueError("Embedding provider returned an unexpected batch size")
         vectors = []
@@ -75,8 +85,8 @@ class DashScopeEmbeddingProvider:
             vectors.append([float(value) for value in vector])
         return vectors
 
-    def embed(self, text: str) -> list[float]:
-        return self.embed_many([text])[0]
+    def embed(self, text: str, text_type: str = "document") -> list[float]:
+        return self.embed_many([text], text_type=text_type)[0]
 
 
 def selected_embedding_provider():
