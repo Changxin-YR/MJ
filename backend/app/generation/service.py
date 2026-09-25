@@ -12,7 +12,6 @@ from app.models import GenerationJob, OutboxEvent, Project, Shot
 from app.providers.registry import registry
 from app.storyboard.state import transition_job, transition_shot
 
-
 IMAGE_CHINESE_TEXT_RULE = (
     "画面中文字规则：如果出现招牌、海报、标签、屏幕、字幕或其他可读文字，"
     "只能使用简体中文；禁止日文假名、韩文谚文、繁体中文和其他外语文字；"
