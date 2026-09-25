@@ -128,7 +128,7 @@ def test_reindex_same_story_keeps_one_knowledge_document():
 
 
 class _FailingEmbedding(FakeEmbeddingProvider):
-    def embed(self, text: str) -> list[float]:
+    def embed(self, text: str, text_type: str = "document") -> list[float]:
         raise RuntimeError("simulated embedding outage")
 
 
