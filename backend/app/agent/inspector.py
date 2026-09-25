@@ -80,6 +80,20 @@ def _normalize_dialogue(text: str) -> str:
     return re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]+", "", text).lower()
 
 
+def _message_text(content) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict) and item.get("text"):
+                parts.append(str(item["text"]))
+            elif isinstance(item, str):
+                parts.append(item)
+        return "".join(parts).strip()
+    return ""
+
+
 def _audio_inspection(shot: Shot, result: MediaResult) -> dict:
     checks = {key: "UNVERIFIED" for key in CHECKS}
     checks["voice_language"] = "UNVERIFIED"
@@ -103,7 +117,7 @@ def _audio_inspection(shot: Shot, result: MediaResult) -> dict:
     )
     response.raise_for_status()
     message = response.json()["choices"][0]["message"]
-    transcript = str(message.get("content") or "").strip()
+    transcript = _message_text(message.get("content"))
     annotations = message.get("annotations") or []
     language = next(
         (
