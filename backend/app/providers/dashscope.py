@@ -2,6 +2,7 @@
 
 import base64
 import io
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -14,6 +15,12 @@ from app.config import settings
 from app.providers.base import MediaResult
 
 MAX_REMOTE_BYTES = 50 * 1024 * 1024
+FOREIGN_ASIAN_SCRIPT = re.compile(r"[\u3040-\u30ff\u31f0-\u31ff\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]")
+
+
+def _validate_chinese_tts_text(text: str) -> None:
+    if FOREIGN_ASIAN_SCRIPT.search(text):
+        raise ValueError("TTS dialogue contains Japanese or Korean script; Chinese-only voice generation is required")
 
 
 def _api(method: str, path: str, *, payload: dict | None = None, asynchronous: bool = False) -> dict:
@@ -104,6 +111,7 @@ class DashScopeVideoProvider:
 
 class DashScopeTTSProvider:
     def synthesize(self, text: str, duration: float) -> MediaResult:
+        _validate_chinese_tts_text(text)
         body = _api("POST", "services/aigc/multimodal-generation/generation", payload={
             "model": settings.dashscope_tts_model,
             "input": {"text": text, "voice": "Cherry", "language_type": "Chinese"},
