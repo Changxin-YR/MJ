@@ -10,7 +10,7 @@ services:
     ports: ["127.0.0.1:23306:3306"]
     volumes: [mysql_data:/var/lib/mysql]
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD"]
+      test: ["CMD-SHELL", "mysqladmin ping --protocol=tcp -h 127.0.0.1 -P 3306 -u root -p$MYSQL_ROOT_PASSWORD"]
       interval: 5s
       retries: 30
   redis:
