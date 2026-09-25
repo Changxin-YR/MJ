@@ -1,6 +1,8 @@
 export interface Workspace { id: string; name: string; role: string }
 export interface Project { id: string; workspace_id: string; name: string; description: string; version: number; settings: Record<string, unknown>; budget_limit: number; budget_used: number; budget_reserved: number; role: string }
 export interface Story { id: string; title: string; content: string; status: string; created_at: string }
+export interface ProjectBible { id: string; title: string; content: string; version: number; created_at: string }
+export interface CharacterRelationship { id: string; source_character_id: string; source_character_name: string; target_character_id: string; target_character_name: string; description: string; version: number; created_at: string }
 export interface CharacterVersion { id: string; character_id: string; version_no: number; status: string; dna: Record<string, string>; background: string }
 export interface Character { id: string; name: string; active_version_id: string | null; version: number; versions: CharacterVersion[] | null }
 export interface Episode { id: string; episode_no: number; title: string; synopsis: string; status: string }
