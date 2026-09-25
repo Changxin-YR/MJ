@@ -196,7 +196,7 @@ def test_long_subjectless_dialogue_keeps_explicit_speaker_anchors():
     ]
     for index in range(18):
         lines.append(f"“第{index + 1}步照旧。”")
-        lines.append(f"“知道了，继续。”")
+        lines.append("“知道了，继续。”")
     lines.extend(
         [
             "“钥匙不在门上。”",
