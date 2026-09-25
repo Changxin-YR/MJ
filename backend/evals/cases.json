@@ -1,9 +1,38 @@
 [
-  {"id": "tool_correctness", "category": "Tool Correctness"},
-  {"id": "structured_output", "category": "Structured Output"},
-  {"id": "context_grounding", "category": "Context Grounding"},
-  {"id": "character_consistency", "category": "Character Consistency"},
-  {"id": "policy_compliance", "category": "Policy Compliance"},
-  {"id": "permission_safety", "category": "Permission Safety"},
-  {"id": "rag_source_quality", "category": "RAG Source Quality"}
+  {
+    "id": "tool_correctness",
+    "category": "Tool Correctness"
+  },
+  {
+    "id": "structured_output",
+    "category": "Structured Output"
+  },
+  {
+    "id": "context_grounding",
+    "category": "Context Grounding"
+  },
+  {
+    "id": "character_consistency",
+    "category": "Character Consistency"
+  },
+  {
+    "id": "policy_compliance",
+    "category": "Policy Compliance"
+  },
+  {
+    "id": "permission_safety",
+    "category": "Permission Safety"
+  },
+  {
+    "id": "rag_source_quality",
+    "category": "RAG Source Quality"
+  },
+  {
+    "id": "cn_subjectless_dialogue",
+    "category": "Chinese Subjectless Dialogue"
+  },
+  {
+    "id": "cn_character_dialogue_retrieval",
+    "category": "Chinese Character Dialogue Retrieval"
+  }
 ]
