@@ -25,7 +25,7 @@ def test_signed_quarantine_magic_and_project_scope():
 
     invalid = b"not-a-png"
     code, body = call(client, "POST", prefix + "/uploads", owner, json={"mime": "image/png", "size": len(invalid)})
-    assert code == 200 and body["data"]["upload_url"].startswith("http://localhost:29000/")
+    assert code == 200 and body["data"]["upload_url"].startswith(f"http://{settings.minio_public_endpoint}/")
     bad_id = body["data"]["asset"]["id"]
     code, body = call(client, "POST", prefix + f"/uploads/{bad_id}/finalize", outsider)
     assert code == 404

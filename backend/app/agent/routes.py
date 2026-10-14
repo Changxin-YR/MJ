@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.agent.production import ProductionOptions, initialize_run, plan_story
 from app.agent.workflow import execute
 from app.api.errors import APIError, ok, trace_id
 from app.audit.service import record
@@ -31,13 +32,16 @@ class RunCreate(BaseModel):
     request: str = Field(min_length=1, max_length=5000)
     intent: str = "ANALYZE"
     shot_id: str | None = None
+    story_title: str | None = Field(default=None, min_length=1, max_length=200)
+    story_content: str | None = Field(default=None, min_length=20, max_length=2_000_000)
+    production: ProductionOptions | None = None
 
 
 def run_data(db: Session, run: AgentRun) -> dict:
     calls = db.scalars(select(ToolCall).where(ToolCall.workspace_id == run.workspace_id, ToolCall.project_id == run.project_id, ToolCall.agent_run_id == run.id).order_by(ToolCall.created_at)).all()
     jobs = db.scalars(select(GenerationJob).where(GenerationJob.workspace_id == run.workspace_id, GenerationJob.project_id == run.project_id, GenerationJob.agent_run_id == run.id)).all()
     pending = db.scalars(select(PendingAction).where(PendingAction.workspace_id == run.workspace_id, PendingAction.project_id == run.project_id, PendingAction.agent_run_id == run.id)).all()
-    return {"id": run.id, "project_id": run.project_id, "request": run.request, "status": run.status, "current_node": run.current_node, "decision_summary": run.decision_summary, "retrieved_sources": run.retrieved_sources, "warnings": run.warnings, "trace_id": run.trace_id, "cost": float(run.estimated_cost), "tool_calls": [{"id": c.id, "name": c.tool_name, "status": c.status, "summary": c.safe_summary} for c in calls], "generation_jobs": [{"id": j.id, "kind": j.kind, "status": j.status, "provider": j.provider} for j in jobs], "pending_actions": [{"id": p.id, "action": p.action, "target_id": p.target_id, "status": p.status, "requester_id": p.requester_id, "approver_id": p.approver_id} for p in pending]}
+    return {"id": run.id, "project_id": run.project_id, "request": run.request, "status": run.status, "current_node": run.current_node, "decision_summary": run.decision_summary, "retrieved_sources": run.retrieved_sources, "warnings": run.warnings, "production": run.production_json, "trace_id": run.trace_id, "cost": float(run.estimated_cost), "tool_calls": [{"id": c.id, "name": c.tool_name, "status": c.status, "summary": c.safe_summary} for c in calls], "generation_jobs": [{"id": j.id, "kind": j.kind, "status": j.status, "provider": j.provider} for j in jobs], "pending_actions": [{"id": p.id, "action": p.action, "target_id": p.target_id, "status": p.status, "requester_id": p.requester_id, "approver_id": p.approver_id} for p in pending]}
 
 
 def advance(db: Session, run: AgentRun, initial: dict | None = None) -> AgentRun:
@@ -48,6 +52,12 @@ def advance(db: Session, run: AgentRun, initial: dict | None = None) -> AgentRun
         run.warnings = [error.code]
         db.commit()
         raise
+    except Exception as error:
+        db.rollback()
+        run.status = "FAILED"
+        run.warnings = [f"DEPENDENCY_UNAVAILABLE: {type(error).__name__}"]
+        db.commit()
+        raise APIError("DEPENDENCY_UNAVAILABLE", "Director dependency failed; start a new run after recovery", 503) from error
     run.status = status
     run.current_node = "Check Approval" if status == "WAITING_APPROVAL" else state.get("current_stage", "END")
     run.decision_summary = state.get("decision_summary", "")
@@ -63,9 +73,39 @@ def create_run(payload: RunCreate, request: Request, scope: ProjectScope = Depen
     require(scope, "project.read")
     if payload.intent != "ANALYZE":
         require(scope, "generation.create")
+    if payload.intent == "AUTOPRODUCE" and not payload.story_content:
+        raise APIError("INVALID_PARAMETER", "story_content is required for automatic production", 422)
+    options = payload.production or ProductionOptions()
     run = AgentRun(workspace_id=scope.workspace_id, project_id=scope.project_id, user_id=scope.user_id, session_id=scope.session_id, request=payload.request, status="RUNNING", current_node="START", trace_id=trace_id(request))
+    if payload.intent == "AUTOPRODUCE":
+        require(scope, "timeline.edit")
+        run.status = "PLANNING"
+        run.production_json = {"mode": "AUTOPRODUCE", "stage": "PLANNING", "input": {"story_title": payload.story_title or "自动制作原作", "story_content": payload.story_content, "options": options.model_dump(), "unattended": payload.production is not None and "auto_generate_images" in payload.production.model_fields_set}}
     db.add(run)
     db.commit()
+    if payload.intent == "AUTOPRODUCE":
+        try:
+            run = db.scalar(select(AgentRun).where(AgentRun.id == run.id).with_for_update().execution_options(populate_existing=True))
+            if run.status == "PLANNING":
+                run.current_node = "Plan Production"
+                initialize_run(db, run, scope, planner=plan_story)
+                db.commit()
+            return ok(request, run_data(db, run))
+        except APIError as error:
+            db.rollback()
+            failed = db.get(AgentRun, run.id)
+            failed.status = "FAILED"
+            failed.warnings = [error.code]
+            db.commit()
+            raise
+        except Exception as error:
+            db.rollback()
+            failed = db.get(AgentRun, run.id)
+            failed.status = "FAILED"
+            failed.current_node = "Plan Production"
+            failed.warnings = [f"{type(error).__name__}: {str(error)[:240]}"]
+            db.commit()
+            raise APIError("PRODUCTION_FAILED", "Automatic production failed; see the run warning for details", 422) from error
     initial = {"identity": {"run_id": run.id, "user_id": scope.user_id}, "scope": {"workspace_id": scope.workspace_id, "project_id": scope.project_id}, "request": payload.request, "intent": payload.intent, "shot_id": payload.shot_id, "generation_jobs": [], "retry_state": {}, "errors": [], "current_stage": "START"}
     advance(db, run, initial)
     return ok(request, run_data(db, run))

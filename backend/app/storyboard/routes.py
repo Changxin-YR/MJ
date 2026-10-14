@@ -7,8 +7,10 @@ from app.api.errors import APIError, ok, trace_id
 from app.audit.service import record
 from app.auth.dependencies import ProjectScope, project_scope, require, scoped_get
 from app.db import get_db
-from app.models import Character, CharacterVersion, Episode, Scene, Shot, now
-from app.storyboard.state import transition_shot
+from app.models import Character, Episode, Scene, Shot, now
+from app.storyboard.prompts import build_prompt
+from app.storyboard.review import reviewed_video, video_inspection
+from app.storyboard.state import SHOT_TRANSITIONS, transition_shot
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["storyboard"])
 
@@ -30,14 +32,14 @@ class SceneEdit(BaseModel):
 
 
 class ShotCreate(BaseModel):
-    shot_type: str = "medium"
-    camera_angle: str = "eye-level"
-    camera_movement: str = "static"
+    shot_type: str = Field(default="medium", max_length=60)
+    camera_angle: str = Field(default="eye-level", max_length=60)
+    camera_movement: str = Field(default="static", max_length=60)
     duration: float = Field(default=6, ge=1, le=30)
     description: str = ""
     action: str = ""
     dialogue: str = ""
-    emotion: str = ""
+    emotion: str = Field(default="", max_length=80)
     character_ids: list[str] = Field(default_factory=list)
     prompt: str = ""
     negative_prompt: str = ""
@@ -45,14 +47,14 @@ class ShotCreate(BaseModel):
 
 class ShotEdit(BaseModel):
     expected_version: int
-    shot_type: str | None = None
-    camera_angle: str | None = None
-    camera_movement: str | None = None
+    shot_type: str | None = Field(default=None, max_length=60)
+    camera_angle: str | None = Field(default=None, max_length=60)
+    camera_movement: str | None = Field(default=None, max_length=60)
     duration: float | None = Field(default=None, ge=1, le=30)
     description: str | None = None
     action: str | None = None
     dialogue: str | None = None
-    emotion: str | None = None
+    emotion: str | None = Field(default=None, max_length=80)
     character_ids: list[str] | None = None
     prompt: str | None = None
     negative_prompt: str | None = None
@@ -184,7 +186,14 @@ def edit_shot(shot_id: str, payload: ShotEdit, request: Request, scope: ProjectS
         raise APIError("SHOT_LOCKED", "Shot is locked", 409)
     if shot.version != payload.expected_version:
         raise APIError("RESOURCE_VERSION_CONFLICT", "Shot changed", 409)
-    updates = payload.model_dump(exclude_unset=True, exclude={"expected_version"})
+    if shot.status not in {"DRAFT", "PLANNED", "STORYBOARD_READY", "REJECTED", "FAILED"}:
+        raise APIError("RESOURCE_CONFLICT", "Return the shot to editing before changing its content", 409)
+    updates = payload.model_dump(exclude_unset=True, exclude_none=True, exclude={"expected_version"})
+    if any(getattr(shot, key) != value for key, value in updates.items()):
+        shot.current_image_asset_id = None
+        shot.current_video_asset_id = None
+        shot.current_audio_asset_id = None
+        shot.inspection_json = None
     if "character_ids" in updates and updates["character_ids"] is not None:
         validate_character_ids(db, scope, updates["character_ids"])
     for key, value in updates.items():
@@ -199,20 +208,28 @@ def edit_shot(shot_id: str, payload: ShotEdit, request: Request, scope: ProjectS
 def transition(shot_id: str, payload: ShotAction, request: Request, scope: ProjectScope = Depends(project_scope), db: Session = Depends(get_db)):
     if payload.target in {"APPROVED", "LOCKED"}:
         require(scope, "review.approve")
-    elif payload.target in {"PLANNED", "STORYBOARD_READY", "REJECTED"}:
+    elif payload.target in {"PLANNED", "STORYBOARD_READY"}:
         require(scope, "content.edit")
-    else:
+    elif payload.target != "REJECTED":
         raise APIError("INVALID_PARAMETER", "Internal transition", 422)
     shot = db.scalar(select(Shot).where(Shot.id == shot_id, Shot.workspace_id == scope.workspace_id, Shot.project_id == scope.project_id).with_for_update())
     if not shot:
         raise APIError("RESOURCE_NOT_FOUND", "Shot not found", 404)
     if shot.version != payload.expected_version:
         raise APIError("RESOURCE_VERSION_CONFLICT", "Shot changed", 409)
-    if payload.target == "APPROVED" and (shot.inspection_json or {}).get("status") == "FAIL" and not (payload.review_reason or "").strip():
-        raise APIError("INSPECTION_FAILED", "A reason is required to approve a failed inspection", 409)
-    if payload.target == "APPROVED" and (shot.inspection_json or {}).get("status") == "FAIL":
-        shot.inspection_json = {**shot.inspection_json, "review_override": {"actor_id": scope.user_id, "reason": payload.review_reason.strip(), "video_asset_id": shot.current_video_asset_id, "reviewed_at": now().isoformat()}}
-        if shot.status == "APPROVED":
+    if payload.target == "REJECTED":
+        require(scope, "review.approve" if shot.status in {"REVIEW_REQUIRED", "APPROVED"} else "content.edit")
+    repair_review = payload.target == "APPROVED" and shot.status in {"APPROVED", "LOCKED"}
+    if not repair_review and payload.target not in SHOT_TRANSITIONS.get(shot.status, set()):
+        raise APIError("SHOT_LOCKED" if shot.status == "LOCKED" else "RESOURCE_CONFLICT", "Invalid shot transition", 409)
+    inspection = video_inspection(shot)
+    if payload.target == "LOCKED" and not reviewed_video(shot, shot.current_video_asset_id):
+        raise APIError("INSPECTION_FAILED", "Review the current video before locking it", 409)
+    if payload.target == "APPROVED" and inspection.get("status") != "PASS" and not (payload.review_reason or "").strip():
+        raise APIError("INSPECTION_FAILED", "A reason is required when video inspection did not pass", 409)
+    if payload.target == "APPROVED" and inspection.get("status") != "PASS":
+        shot.inspection_json = {**inspection, "asset_id": shot.current_video_asset_id, "kind": "VIDEO", "review_override": {"actor_id": scope.user_id, "reason": payload.review_reason.strip(), "video_asset_id": shot.current_video_asset_id, "reviewed_at": now().isoformat()}}
+        if shot.status in {"APPROVED", "LOCKED"}:
             shot.version += 1
             record(db, actor_type="USER", actor_id=scope.user_id, action="shot.review_override", resource_type="shot", resource_id=shot.id, workspace_id=scope.workspace_id, project_id=scope.project_id, trace_id=trace_id(request), safe_summary=payload.review_reason.strip())
             db.commit()
@@ -237,6 +254,8 @@ def reorder(shot_id: str, payload: Reorder, request: Request, scope: ProjectScop
     other = db.scalar(select(Shot).where(Shot.workspace_id == scope.workspace_id, Shot.project_id == scope.project_id, Shot.scene_id == shot.scene_id, Shot.shot_no == payload.target_no).with_for_update())
     if not other:
         raise APIError("RESOURCE_NOT_FOUND", "Target position not found", 404)
+    if other.status == "LOCKED":
+        raise APIError("SHOT_LOCKED", "Target shot is locked", 409)
     if other.id != shot.id:
         old_no = shot.shot_no
         shot.shot_no = -1
@@ -255,11 +274,4 @@ def reorder(shot_id: str, payload: Reorder, request: Request, scope: ProjectScop
 def built_prompt(shot_id: str, request: Request, scope: ProjectScope = Depends(project_scope), db: Session = Depends(get_db)):
     require(scope, "project.read")
     shot = scoped_get(db, Shot, shot_id, scope)
-    anchors, negatives = [], []
-    for cid in shot.character_ids:
-        c = scoped_get(db, Character, cid, scope)
-        if c.active_version_id:
-            v = scoped_get(db, CharacterVersion, c.active_version_id, scope)
-            anchors.append(f"{c.name}: {v.dna.get('prompt_anchor', '')}; face {v.dna.get('face', '')}; hair {v.dna.get('hair', '')}; costume {v.dna.get('costume', '')}; style {v.dna.get('style', '')}")
-            negatives.append(v.dna.get("negative_prompt", ""))
-    return ok(request, {"prompt": ". ".join(filter(None, [shot.description, shot.action, shot.prompt, *anchors])), "negative_prompt": ", ".join(filter(None, [shot.negative_prompt, *negatives]))})
+    return ok(request, build_prompt(db, scope, shot))

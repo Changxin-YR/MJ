@@ -5,5 +5,5 @@ export default defineConfig({
   timeout: 180_000,
   expect: { timeout: 15_000 },
   reporter: 'list',
-  use: { baseURL: 'http://localhost:28080', trace: 'retain-on-failure', screenshot: 'only-on-failure', ...devices['Desktop Chrome'] },
+  use: { baseURL: process.env.FRAMEFORGE_BASE_URL || 'http://localhost:28080', trace: 'retain-on-failure', screenshot: 'only-on-failure', ...devices['Desktop Chrome'] },
 })

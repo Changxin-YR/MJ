@@ -16,6 +16,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -94,7 +95,7 @@ class ProjectMember(IdMixin, Base):
 class StorySource(IdMixin, ScopeMixin, Base):
     __tablename__ = "story_sources"
     title: Mapped[str] = mapped_column(String(200), nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content: Mapped[str] = mapped_column(Text().with_variant(MEDIUMTEXT(), "mysql"), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE", nullable=False)
     created_by: Mapped[str] = mapped_column(String(36), nullable=False)
 
@@ -247,6 +248,7 @@ class AgentRun(IdMixin, ScopeMixin, Base):
     decision_summary: Mapped[str] = mapped_column(Text, default="", nullable=False)
     retrieved_sources: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     warnings: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    production_json: Mapped[dict | None] = mapped_column(JSON)
     trace_id: Mapped[str] = mapped_column(String(36), nullable=False)
     estimated_cost: Mapped[float] = mapped_column(Numeric(12, 4), default=0, nullable=False)
 
@@ -294,6 +296,7 @@ class KnowledgeVersion(IdMixin, ScopeMixin, Base):
 
 class Timeline(IdMixin, ScopeMixin, Base):
     __tablename__ = "timelines"
+    __table_args__ = (UniqueConstraint("workspace_id", "project_id", "episode_id", name="uq_timeline_episode"),)
     episode_id: Mapped[str] = mapped_column(String(36), ForeignKey("episodes.id"), nullable=False)
     status: Mapped[str] = mapped_column(String(30), default="DRAFT", nullable=False)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)

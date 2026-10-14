@@ -3,6 +3,7 @@
 import base64
 import io
 import json
+import math
 import subprocess
 import tempfile
 from pathlib import Path
@@ -79,7 +80,12 @@ def _visual_inspection(shot: Shot, frame: bytes) -> dict:
         if content.startswith("json"):
             content = content[4:].strip()
     raw = json.loads(content)
-    checks = {key: value if value in {"PASS", "FAIL", "UNVERIFIED"} else "UNVERIFIED" for key, value in ((key, raw.get("checks", {}).get(key)) for key in CHECKS)}
+    if not isinstance(raw, dict) or not isinstance(raw.get("checks"), dict) or not isinstance(raw.get("issues", []), list):
+        raise ValueError("Invalid inspection structure")
+    score = raw.get("score")
+    if isinstance(score, bool) or not isinstance(score, (int, float)) or not math.isfinite(score):
+        raise ValueError("Invalid inspection score")
+    checks = {key: value if isinstance(value, str) and value in {"PASS", "FAIL", "UNVERIFIED"} else "UNVERIFIED" for key, value in ((key, raw.get("checks", {}).get(key)) for key in CHECKS)}
     for key in ("dialogue", "subtitle", "scene_continuity"):
         checks[key] = "UNVERIFIED"
     if not shot.character_ids:
@@ -101,5 +107,9 @@ def inspect_media(shot: Shot, result: MediaResult, provider: str) -> dict:
         if not frame:
             raise ValueError("No frame available for inspection")
         return _visual_inspection(shot, frame)
-    except (ValueError, KeyError, httpx.HTTPError, subprocess.SubprocessError) as error:
-        return {"status": "FAIL", "score": 0.0, "issues": [f"Visual inspection unavailable: {type(error).__name__}"], "checks": checks, "method": "QWEN_VL", "model": settings.dashscope_vision_model}
+    except (ValueError, KeyError, TypeError, AttributeError, IndexError, httpx.HTTPError, subprocess.SubprocessError) as error:
+        # An unavailable inspector is different from a failed visual check. The
+        # production coordinator may continue in degraded mode and record the
+        # issue for audit; otherwise a transient model/network outage can abort
+        # an otherwise valid media pipeline after exhausting image retries.
+        return {"status": "UNVERIFIED", "score": 0.0, "issues": [f"Visual inspection unavailable: {type(error).__name__}"], "checks": checks, "method": "QWEN_VL_UNAVAILABLE", "model": settings.dashscope_vision_model}

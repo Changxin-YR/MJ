@@ -1,8 +1,8 @@
 import json
-from collections.abc import Generator
+from collections.abc import AsyncGenerator
 from uuid import uuid4
 
-import redis
+import redis.asyncio as redis
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -54,19 +54,21 @@ def get_job(job_id: str, request: Request, scope: ProjectScope = Depends(project
 def events(scope: ProjectScope = Depends(project_scope)):
     require(scope, "project.read")
 
-    def stream() -> Generator[str, None, None]:
-        subscriber = redis.from_url(settings.redis_url).pubsub()
-        subscriber.subscribe(f"project:{scope.project_id}:events")
+    async def stream() -> AsyncGenerator[str, None]:
+        connection = redis.from_url(settings.redis_url)
+        subscriber = connection.pubsub()
         try:
+            await subscriber.subscribe(f"project:{scope.project_id}:events")
             yield ": connected\n\n"
             while True:
-                message = subscriber.get_message(ignore_subscribe_messages=True, timeout=15)
+                message = await subscriber.get_message(ignore_subscribe_messages=True, timeout=15)
                 if message:
                     payload = json.loads(message["data"])
                     yield f"id: {uuid4()}\nevent: {payload['event']}\ndata: {json.dumps(payload['data'])}\n\n"
                 else:
                     yield ": heartbeat\n\n"
         finally:
-            subscriber.close()
+            await subscriber.aclose()
+            await connection.aclose()
 
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

@@ -10,6 +10,7 @@ from app.auth.dependencies import ProjectScope, require
 from app.config import settings
 from app.models import GenerationJob, OutboxEvent, Project, Shot
 from app.providers.registry import registry
+from app.storyboard.prompts import build_prompt
 from app.storyboard.state import transition_job, transition_shot
 
 
@@ -28,12 +29,14 @@ def request_generation(db: Session, scope: ProjectScope, shot_id: str, kind: str
     require(scope, "generation.create")
     if kind not in {"IMAGE", "VIDEO", "VOICE"}:
         raise APIError("INVALID_PARAMETER", "Unknown generation kind", 422)
-    existing = db.scalar(select(GenerationJob).where(GenerationJob.workspace_id == scope.workspace_id, GenerationJob.project_id == scope.project_id, GenerationJob.idempotency_key == idempotency_key))
+    project = db.scalar(select(Project).where(Project.id == scope.project_id, Project.workspace_id == scope.workspace_id).with_for_update())
+    if not project:
+        raise APIError("RESOURCE_NOT_FOUND", "Project not found", 404)
+    existing = db.scalar(select(GenerationJob).where(GenerationJob.workspace_id == scope.workspace_id, GenerationJob.project_id == scope.project_id, GenerationJob.idempotency_key == idempotency_key).with_for_update())
     if existing:
         if existing.resource_id != shot_id or existing.kind != kind:
             raise APIError("RESOURCE_CONFLICT", "Idempotency key already used", 409)
         return existing
-    project = db.scalar(select(Project).where(Project.id == scope.project_id, Project.workspace_id == scope.workspace_id).with_for_update())
     shot = db.scalar(select(Shot).where(Shot.id == shot_id, Shot.workspace_id == scope.workspace_id, Shot.project_id == scope.project_id).with_for_update())
     if not shot:
         raise APIError("RESOURCE_NOT_FOUND", "Shot not found", 404)
@@ -53,7 +56,7 @@ def request_generation(db: Session, scope: ProjectScope, shot_id: str, kind: str
         model = settings.comfyui_checkpoint
     else:
         model = f"fake-{kind.lower()}-v1"
-    job = GenerationJob(workspace_id=scope.workspace_id, project_id=scope.project_id, provider=entry.provider, model=model, resource_type="shot", resource_id=shot.id, kind=kind, input_json={"prompt": ". ".join(filter(None, [shot.description, shot.action, shot.prompt])), "negative_prompt": shot.negative_prompt, "duration": shot.duration, "dialogue": shot.dialogue, "image_asset_id": shot.current_image_asset_id}, idempotency_key=idempotency_key, estimated_cost=estimate, actual_cost=0, status="CREATED", trace_id=trace_id, agent_run_id=agent_run_id, tool_call_id=tool_call_id)
+    job = GenerationJob(workspace_id=scope.workspace_id, project_id=scope.project_id, provider=entry.provider, model=model, resource_type="shot", resource_id=shot.id, kind=kind, input_json={**build_prompt(db, scope, shot), "duration": shot.duration, "dialogue": shot.dialogue, "image_asset_id": shot.current_image_asset_id}, idempotency_key=idempotency_key, estimated_cost=estimate, actual_cost=0, status="CREATED", trace_id=trace_id, agent_run_id=agent_run_id, tool_call_id=tool_call_id)
     db.add(job)
     db.flush()
     transition_job(job, "QUEUED")

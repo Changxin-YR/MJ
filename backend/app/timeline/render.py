@@ -40,7 +40,7 @@ def render_timeline(clips: list[tuple[Asset, Asset | None, str, float]]) -> Medi
             inputs += ["-i", str(video_path)]
             audio_chunks.append(normalized_audio(download(voice), directory, index, duration) if voice else b"\x00" * (int(duration * 22050) * 2))
             if subtitle.strip():
-                text = subtitle.replace("\r", " ").replace("\n", " ").replace("-->", "→")[:300]
+                text = subtitle.replace("\r", " ").replace("\n", " ").replace("-->", "→")
                 subtitles.append(f"{index + 1}\n{format_srt(elapsed)} --> {format_srt(elapsed + duration)}\n{text}\n")
             elapsed += duration
         audio_path = directory / "voice_track.wav"
@@ -50,7 +50,7 @@ def render_timeline(clips: list[tuple[Asset, Asset | None, str, float]]) -> Medi
             wav.setframerate(22050)
             wav.writeframes(b"".join(audio_chunks))
         inputs += ["-i", str(audio_path)]
-        filter_parts = [f"[{i}:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24,format=yuv420p,setpts=PTS-STARTPTS[v{i}]" for i in range(len(clips))]
+        filter_parts = [f"[{i}:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24,format=yuv420p,tpad=stop_mode=clone:stop_duration={clips[i][3]},trim=duration={clips[i][3]},setpts=PTS-STARTPTS[v{i}]" for i in range(len(clips))]
         filter_parts.append("".join(f"[v{i}]" for i in range(len(clips))) + f"concat=n={len(clips)}:v=1:a=0[v]")
         video_map = "[v]"
         if subtitles:

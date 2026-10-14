@@ -9,7 +9,6 @@ from pathlib import Path
 from uuid import uuid4
 
 from minio import Minio
-from minio.commonconfig import CopySource
 from minio.error import S3Error
 from PIL import Image, UnidentifiedImageError
 
@@ -99,7 +98,7 @@ def promote_quarantine(asset: Asset, declared_size: int) -> str:
     width, height, duration = validate(MediaResult(content=data, mime=asset.mime))
     suffix = {"image/png": "png", "video/mp4": "mp4", "audio/wav": "wav"}[asset.mime]
     ready_key = f"{asset.workspace_id}/{asset.project_id}/uploads/{asset.id}.{suffix}"
-    storage.copy_object(asset.bucket, ready_key, CopySource(asset.bucket, asset.object_key))
+    storage.put_object(asset.bucket, ready_key, io.BytesIO(data), len(data), content_type=asset.mime)
     quarantine_key = asset.object_key
     asset.object_key = ready_key
     asset.sha256 = hashlib.sha256(data).hexdigest()
@@ -117,4 +116,4 @@ def store_result(*, workspace_id: str, project_id: str, job_id: str, result: Med
     if not storage.bucket_exists(settings.minio_bucket):
         storage.make_bucket(settings.minio_bucket)
     storage.put_object(settings.minio_bucket, object_key, io.BytesIO(result.content), len(result.content), content_type=result.mime)
-    return Asset(workspace_id=workspace_id, project_id=project_id, bucket=settings.minio_bucket, object_key=object_key, mime=result.mime, sha256=hashlib.sha256(result.content).hexdigest(), size=len(result.content), width=width, height=height, duration=duration, status="READY", source_job_id=source_job_id or job_id)
+    return Asset(workspace_id=workspace_id, project_id=project_id, bucket=settings.minio_bucket, object_key=object_key, mime=result.mime, sha256=hashlib.sha256(result.content).hexdigest(), size=len(result.content), width=width, height=height, duration=duration, status="READY", source_job_id=source_job_id)

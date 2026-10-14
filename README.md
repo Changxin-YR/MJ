@@ -1,6 +1,6 @@
 # FrameForge AI
 
-AI 漫剧制作平台。实现与验收状态见 [架构](docs/architecture.md) 和 [证据矩阵](docs/final-evidence.md)。可播放的真实 60 秒成片在 [evidence/final-demo/final.mp4](evidence/final-demo/final.mp4)。
+AI 漫剧制作平台。新对话或新维护者先读[接手说明](docs/HANDOFF.md)；实现与验收状态见 [架构](docs/architecture.md) 和 [证据矩阵](docs/final-evidence.md)。可播放的真实 60 秒成片在 [evidence/final-demo/final.mp4](evidence/final-demo/final.mp4)。
 
 ## Local development
 

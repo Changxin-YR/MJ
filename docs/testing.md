@@ -21,5 +21,5 @@ npm run e2e
 
 1. 在仓库根目录执行 `docker compose ps`，确认 `api`、`worker`、`dispatcher`、`frontend`、MySQL、Redis、Qdrant、MinIO 正在运行；打开 `http://localhost:28081/health/ready` 查看依赖状态。
 2. 打开 `http://localhost:28080`，注册或登录，创建工作空间和项目，再依次创建故事、角色、分镜。检查生成队列、镜头审核、时间线同步和成片播放。已有 60 秒真实成片见 `evidence/final-demo/final.mp4`。
-3. 当前本机 `.env` 的 `PROVIDER_MODE=comfyui` 会由私有 ComfyUI 真实生成图像，视频和配音使用 FakeProvider。要手动体验三类真实模型，将 `.env` 中 `PROVIDER_MODE` 改为 `dashscope`，确认 `DASHSCOPE_API_KEY` 已配置，然后执行 `docker compose up -d --force-recreate api worker dispatcher`。测试后可改回 `comfyui` 并再次执行该命令。
+3. 当前本机 `.env` 的 `PROVIDER_MODE=dashscope`、`EMBEDDING_MODE=dashscope`、`DIRECTOR_LLM_MODE=dashscope` 会使用百炼的图像、视频、配音、向量和 Director；切回本地图像生成时，将 `PROVIDER_MODE` 改为 `comfyui`，然后执行 `docker compose up -d --force-recreate api worker dispatcher`。变更向量模式后需在故事面板重新索引故事。
 4. Windows 重启后，Docker Desktop 的 Compose 服务与宿主机 ComfyUI 是两套进程。Compose 服务用 `docker compose up -d` 启动；宿主机 ComfyUI 用 `scripts/start-comfyui-local.ps1` 启动，具体路径见 [ComfyUI 配置](comfyui.md)。

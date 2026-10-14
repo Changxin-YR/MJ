@@ -1,9 +1,14 @@
+import logging
 import subprocess
+from contextlib import contextmanager
 from datetime import timedelta
 from decimal import Decimal
+from threading import Event, Thread
 from uuid import uuid4
 
-from sqlalchemy import select
+import httpx
+from minio.error import S3Error
+from sqlalchemy import select, update
 
 from app.agent.inspector import inspect_media
 from app.asset.storage import client as minio_client
@@ -13,18 +18,58 @@ from app.db import SessionLocal
 from app.generation.events import publish
 from app.generation.service import retry_delay, settle
 from app.models import (
+    AgentRun,
     Asset,
     GenerationJob,
     GenerationOutput,
     OutboxEvent,
     Project,
     Shot,
+    StorySource,
     UsageRecord,
     now,
 )
 from app.providers.registry import registry
 from app.storyboard.state import transition_job, transition_shot
 from app.workers.celery_app import celery_app
+
+logger = logging.getLogger(__name__)
+HEARTBEAT_SECONDS = 30
+
+
+def notify(project_id, name, data):
+    try:
+        publish(project_id, name, data)
+    except Exception:
+        logger.exception("generation notification failed", extra={"project_id": project_id, "event": name})
+
+
+def renew_lease(job_id, owner):
+    with SessionLocal() as db:
+        renewed = db.execute(update(GenerationJob).where(GenerationJob.id == job_id, GenerationJob.status == "RUNNING", GenerationJob.lease_owner == owner).values(last_heartbeat_at=now(), lease_expires_at=now() + timedelta(minutes=5)))
+        db.commit()
+        return bool(renewed.rowcount)
+
+
+@contextmanager
+def lease_heartbeat(job_id, owner):
+    stopped = Event()
+
+    def heartbeat():
+        while not stopped.wait(HEARTBEAT_SECONDS):
+            try:
+                if not renew_lease(job_id, owner):
+                    return
+            except Exception:
+                logger.exception("generation lease renewal failed", extra={"job_id": job_id})
+
+    thread = Thread(target=heartbeat, name=f"job-lease-{job_id}", daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stopped.set()
+        thread.join(timeout=2)
 
 
 def claim_job(job_id: str) -> str | None:
@@ -47,7 +92,7 @@ def claim_job(job_id: str) -> str | None:
         job.started_at = job.started_at or now()
         db.commit()
         project_id = job.project_id
-    publish(project_id, "generation.started", {"job_id": job_id})
+    notify(project_id, "generation.started", {"job_id": job_id})
     return owner
 
 
@@ -103,12 +148,15 @@ def defer_poll(job_id: str, owner: str) -> None:
 
 def complete_job(job_id: str, owner: str, result, inspection: dict) -> None:
     with SessionLocal() as db:
+        project_id = db.scalar(select(GenerationJob.project_id).where(GenerationJob.id == job_id))
+        if not project_id:
+            return
+        project = db.scalar(select(Project).where(Project.id == project_id).with_for_update())
         job = db.scalar(select(GenerationJob).where(GenerationJob.id == job_id).with_for_update())
         if not job or job.status != "RUNNING" or job.lease_owner != owner:
             return
         shot = db.scalar(select(Shot).where(Shot.id == job.resource_id, Shot.workspace_id == job.workspace_id, Shot.project_id == job.project_id).with_for_update())
-        project = db.scalar(select(Project).where(Project.id == job.project_id, Project.workspace_id == job.workspace_id).with_for_update())
-        asset = store_result(workspace_id=job.workspace_id, project_id=job.project_id, job_id=job.id, result=result)
+        asset = store_result(workspace_id=job.workspace_id, project_id=job.project_id, job_id=job.id, result=result, source_job_id=job.id)
         db.add(asset)
         db.flush()
         db.add(GenerationOutput(workspace_id=job.workspace_id, project_id=job.project_id, job_id=job.id, asset_id=asset.id, kind=job.kind))
@@ -118,9 +166,9 @@ def complete_job(job_id: str, owner: str, result, inspection: dict) -> None:
             shot.current_video_asset_id = asset.id
         else:
             shot.current_audio_asset_id = asset.id
-        # The shot displays the current visual review. A later voice job has
-        # only a technical audio check and must not erase image/video findings.
-        if job.kind != "VOICE" or not shot.inspection_json:
+        inspection = {**inspection, "asset_id": asset.id, "kind": job.kind}
+        # Current video review remains authoritative when a different medium is regenerated.
+        if job.kind == "VIDEO" or (not shot.current_video_asset_id and (job.kind == "IMAGE" or not shot.inspection_json)):
             shot.inspection_json = inspection
         job.inspection_json = inspection
         transition_job(job, "SUCCEEDED")
@@ -140,16 +188,23 @@ def complete_job(job_id: str, owner: str, result, inspection: dict) -> None:
         project_id = job.project_id
         asset_id = asset.id
     registry.success(job.provider)
-    publish(project_id, "generation.completed", {"job_id": job_id, "asset_id": asset_id})
+    notify(project_id, "generation.completed", {"job_id": job_id, "asset_id": asset_id})
+    if job.agent_run_id:
+        celery_app.send_task("production.advance", args=[job.agent_run_id], task_id=f"production-advance:{job.id}")
 
 
 def fail_job(job_id: str, owner: str, error: Exception) -> None:
-    retryable = isinstance(error, (TimeoutError, ConnectionError, OSError, subprocess.TimeoutExpired))
+    retryable = isinstance(error, (TimeoutError, ConnectionError, OSError, subprocess.TimeoutExpired, httpx.TransportError)) or (
+        isinstance(error, S3Error) and error.code in {"SlowDown", "InternalError", "ServiceUnavailable", "RequestTimeout", "RequestTimeTooSkewed"}
+    )
     with SessionLocal() as db:
+        project_id = db.scalar(select(GenerationJob.project_id).where(GenerationJob.id == job_id))
+        if not project_id:
+            return
+        project = db.scalar(select(Project).where(Project.id == project_id).with_for_update())
         job = db.scalar(select(GenerationJob).where(GenerationJob.id == job_id).with_for_update())
         if not job or job.status != "RUNNING" or job.lease_owner != owner:
             return
-        project = db.scalar(select(Project).where(Project.id == job.project_id, Project.workspace_id == job.workspace_id).with_for_update())
         job.error_code = "TEMPORARY_UNAVAILABLE" if retryable else "GENERATION_FAILED"
         job.error_message = str(error)[:500]
         job.lease_owner = None
@@ -169,7 +224,7 @@ def fail_job(job_id: str, owner: str, error: Exception) -> None:
         db.commit()
         project_id, provider = job.project_id, job.provider
     registry.failure(provider)
-    publish(project_id, "generation.failed", {"job_id": job_id, "retrying": retryable})
+    notify(project_id, "generation.failed", {"job_id": job_id, "retrying": retryable})
 
 
 @celery_app.task(name="generation.process", acks_late=True)
@@ -177,19 +232,57 @@ def process_generation(job_id: str):
     owner = claim_job(job_id)
     if not owner:
         return
-    with SessionLocal() as db:
-        job = db.get(GenerationJob, job_id)
-        db.expunge(job)
-    try:
-        result = generate(job)
-        if result is None:
-            defer_poll(job_id, owner)
-        else:
-            validate(result)
+    with lease_heartbeat(job_id, owner):
+        try:
             with SessionLocal() as db:
-                shot = db.get(Shot, job.resource_id)
-                db.expunge(shot)
-            inspection = inspect_media(shot, result, job.provider)
-            complete_job(job_id, owner, result, inspection)
-    except Exception as error:
-        fail_job(job_id, owner, error)
+                job = db.get(GenerationJob, job_id)
+                db.expunge(job)
+            result = generate(job)
+            if result is None:
+                defer_poll(job_id, owner)
+            else:
+                validate(result)
+                with SessionLocal() as db:
+                    shot = db.get(Shot, job.resource_id)
+                    db.expunge(shot)
+                inspection = inspect_media(shot, result, job.provider)
+                complete_job(job_id, owner, result, inspection)
+        except Exception as error:
+            fail_job(job_id, owner, error)
+
+
+@celery_app.task(name="production.advance", acks_late=True)
+def process_production(run_id: str):
+    from app.agent.automation import advance_production
+
+    advance_production(run_id)
+
+
+@celery_app.task(bind=True, name="knowledge.index", acks_late=True, max_retries=3)
+def index_production_story(self, run_id, story_id):
+    from app.rag.service import index_story
+
+    with SessionLocal() as db:
+        run = db.get(AgentRun, run_id)
+        if not run or (run.production_json or {}).get("story_id") != story_id:
+            return
+        if run.production_json.get("knowledge_index_status") == "COMPLETED":
+            return
+        story = db.scalar(select(StorySource).where(StorySource.id == story_id, StorySource.workspace_id == run.workspace_id, StorySource.project_id == run.project_id))
+        if not story:
+            return
+        try:
+            index_story(db, story)
+            run = db.scalar(select(AgentRun).where(AgentRun.id == run_id).with_for_update().execution_options(populate_existing=True))
+            run.production_json = {**run.production_json, "knowledge_index_status": "COMPLETED"}
+            db.commit()
+        except Exception as error:
+            db.rollback()
+            run = db.scalar(select(AgentRun).where(AgentRun.id == run_id).with_for_update().execution_options(populate_existing=True))
+            retrying = self.request.retries < self.max_retries
+            run.production_json = {**run.production_json, "knowledge_index_status": "RETRYING" if retrying else "FAILED"}
+            warning = f"知识索引{'重试中' if retrying else '失败'}：{type(error).__name__}"
+            run.warnings = list(dict.fromkeys([*(run.warnings or []), warning]))[-50:]
+            db.commit()
+            if retrying:
+                raise self.retry(exc=error, countdown=2 ** (self.request.retries + 1)) from error

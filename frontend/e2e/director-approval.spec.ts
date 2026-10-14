@@ -28,8 +28,8 @@ test('Director tool waits for approval before generation', async ({ page, reques
   }
   await page.goto(`/projects/${project.id}/director`)
   await expect(page.getByRole('heading', { name: 'Director Studio' })).toBeVisible()
-  await page.getByPlaceholder('例如：分析项目上下文，并为选定镜头生成图像').fill('Generate one image for this shot')
   await page.getByLabel('执行意图').selectOption('GENERATE_IMAGE')
+  await page.getByPlaceholder('例如：分析项目上下文，并为选定镜头生成图像').fill('Generate one image for this shot')
   await page.getByLabel('目标镜头').selectOption(shot.id)
   await page.getByRole('button', { name: '运行', exact: true }).click()
   await expect(page.getByText('Director 已提出操作，等待人工批准。')).toBeVisible()

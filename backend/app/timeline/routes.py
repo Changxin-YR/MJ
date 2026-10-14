@@ -19,6 +19,7 @@ from app.models import (
     TimelineItem,
     TimelineTrack,
 )
+from app.storyboard.review import reviewed_video
 from app.timeline.render import render_timeline
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["timeline"])
@@ -35,21 +36,13 @@ def timeline_data(db: Session, timeline: Timeline) -> dict:
     return {"id": timeline.id, "episode_id": timeline.episode_id, "status": timeline.status, "version": timeline.version, "final_asset_id": timeline.final_asset_id, "tracks": [{"id": t.id, "kind": t.kind, "order_no": t.order_no} for t in tracks], "items": [{"id": i.id, "track_id": i.track_id, "shot_id": i.shot_id, "asset_id": i.asset_id, "start_seconds": i.start_seconds, "duration_seconds": i.duration_seconds, "text": i.text} for i in items]}
 
 
-def reviewed_video(shot: Shot, asset_id: str) -> bool:
-    inspection = shot.inspection_json or {}
-    override = inspection.get("review_override") or {}
-    return shot.status in {"APPROVED", "LOCKED"} and shot.current_video_asset_id == asset_id and (
-        inspection.get("status") == "PASS" or (
-            inspection.get("status") == "FAIL" and override.get("video_asset_id") == asset_id and bool(override.get("reason"))
-        )
-    )
-
-
 @router.post("/episodes/{episode_id}/timeline")
 def create_timeline(episode_id: str, request: Request, scope: ProjectScope = Depends(project_scope), db: Session = Depends(get_db)):
     require(scope, "timeline.edit")
-    scoped_get(db, Episode, episode_id, scope)
-    existing = db.scalar(select(Timeline).where(Timeline.workspace_id == scope.workspace_id, Timeline.project_id == scope.project_id, Timeline.episode_id == episode_id))
+    episode = db.scalar(select(Episode).where(Episode.id == episode_id, Episode.workspace_id == scope.workspace_id, Episode.project_id == scope.project_id).with_for_update())
+    if not episode:
+        raise APIError("RESOURCE_NOT_FOUND", "Episode not found", 404)
+    existing = db.scalar(select(Timeline).where(Timeline.workspace_id == scope.workspace_id, Timeline.project_id == scope.project_id, Timeline.episode_id == episode_id).with_for_update())
     if existing:
         return ok(request, timeline_data(db, existing))
     timeline = Timeline(workspace_id=scope.workspace_id, project_id=scope.project_id, episode_id=episode_id)
@@ -87,12 +80,17 @@ def sync_timeline(timeline_id: str, payload: VersionPayload, request: Request, s
     db.execute(delete(TimelineItem).where(TimelineItem.workspace_id == scope.workspace_id, TimelineItem.project_id == scope.project_id, TimelineItem.timeline_id == timeline.id))
     elapsed = 0.0
     for shot in shots:
+        voice = scoped_get(db, Asset, shot.current_audio_asset_id, scope) if shot.current_audio_asset_id else None
+        duration = max(shot.duration, float(voice.duration or 0) if voice else 0)
         for kind, asset_id, text in (("VIDEO", shot.current_video_asset_id, ""), ("VOICE", shot.current_audio_asset_id, ""), ("SUBTITLE", None, shot.dialogue)):
             if asset_id or text:
-                db.add(TimelineItem(workspace_id=scope.workspace_id, project_id=scope.project_id, timeline_id=timeline.id, track_id=tracks[kind].id, shot_id=shot.id, asset_id=asset_id, start_seconds=elapsed, duration_seconds=shot.duration, text=text))
-        elapsed += shot.duration
+                db.add(TimelineItem(workspace_id=scope.workspace_id, project_id=scope.project_id, timeline_id=timeline.id, track_id=tracks[kind].id, shot_id=shot.id, asset_id=asset_id, start_seconds=elapsed, duration_seconds=duration, text=text))
+        elapsed += duration
     timeline.version += 1
     timeline.status = "READY"
+    # The previous export remains in the asset library; it is not an export
+    # of the newly synced timeline.
+    timeline.final_asset_id = None
     record(db, actor_type="USER", actor_id=scope.user_id, action="timeline.sync", resource_type="timeline", resource_id=timeline.id, workspace_id=scope.workspace_id, project_id=scope.project_id, trace_id=trace_id(request), safe_summary=f"{len(shots)} approved shots")
     db.commit()
     return ok(request, timeline_data(db, timeline))

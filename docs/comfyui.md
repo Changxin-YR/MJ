@@ -4,9 +4,9 @@ FrameForge 的 IMAGE Job 经 Provider Gateway 调用固定的 `basic-t2i-v1` 工
 
 ## 已验证的本机实例
 
-2026-09-23 在 RTX 4060 Laptop GPU（8 GB）上，使用 ComfyUI `0.34.0`、`Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors`、`--lowvram`，服务仅监听 `127.0.0.1:8189`。适配器真实出图为 1024×576 PNG，见 [样图](../evidence/comfyui-live/sample.png) 与 [适配器报告](../evidence/comfyui-live/report.json)。通过 HTTP API 创建的 IMAGE Job 由 Outbox/Worker 执行，最终资产进入 MinIO，见 [完整链路报告](../evidence/comfyui-live/job-report.json)。本机 `.env` 已设置 `PROVIDER_MODE=comfyui`、`COMFYUI_URL=http://host.docker.internal:8189` 和上述 checkpoint。该模式下 VIDEO、VOICE 使用 FakeProvider。
+2026-09-23 在 RTX 4060 Laptop GPU（8 GB）上，使用 ComfyUI `0.34.0`、`Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors`、`--lowvram`，服务仅监听 `127.0.0.1:8189`。适配器真实出图为 1024×576 PNG，见 [样图](../evidence/comfyui-live/sample.png) 与 [适配器报告](../evidence/comfyui-live/report.json)。通过 HTTP API 创建的 IMAGE Job 由 Outbox/Worker 执行，最终资产进入 MinIO，见 [完整链路报告](../evidence/comfyui-live/job-report.json)。本机 ComfyUI 可通过 `COMFYUI_URL=http://host.docker.internal:8189` 和上述 checkpoint 使用；当前默认 `.env` 为 DashScope 模式。切换到 `PROVIDER_MODE=comfyui` 时，VIDEO、VOICE 仍使用 FakeProvider。
 
-重启 Windows 后，在已有 ComfyUI 目录执行：
+当前默认 `.env` 使用 DashScope；需要切换到本地 ComfyUI 图像模式时，在 Windows 重启后或服务未运行时，在已有 ComfyUI 目录执行：
 
 ```powershell
 .\scripts\start-comfyui-local.ps1 -ComfyUIPath 'D:\path\to\ComfyUI'

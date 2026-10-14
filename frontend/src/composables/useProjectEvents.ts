@@ -1,5 +1,6 @@
 import { onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { getAccessToken } from '../api'
+import { api } from '../api'
 
 export function useProjectEvents(projectId: Ref<string>, onEvent: (name: string) => void) {
   const connected = ref(false)
@@ -8,12 +9,14 @@ export function useProjectEvents(projectId: Ref<string>, onEvent: (name: string)
 
   async function connect(id: string) {
     controller?.abort()
+    connected.value = false
     if (!id) return
     controller = new AbortController()
     const signal = controller.signal
     while (!stopped && !signal.aborted) {
       try {
         const response = await fetch(`/api/v1/projects/${id}/events`, { headers: { Authorization: `Bearer ${getAccessToken() || ''}` }, signal })
+        if (response.status === 401) { await api.get('/auth/me'); throw new Error('Reconnect with refreshed token') }
         if (!response.ok || !response.body) throw new Error('Stream unavailable')
         connected.value = true
         const reader = response.body.getReader()
@@ -30,7 +33,8 @@ export function useProjectEvents(projectId: Ref<string>, onEvent: (name: string)
             if (name) onEvent(name)
           }
         }
-      } catch { connected.value = false }
+      } catch { /* Reconnect after temporary network interruption. */ }
+      finally { if (controller?.signal === signal) connected.value = false }
       if (!signal.aborted && !stopped) await new Promise(resolve => setTimeout(resolve, 3000))
     }
   }
